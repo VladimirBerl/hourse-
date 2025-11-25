@@ -1,0 +1,7 @@
+{
+  "name": "Copy of V.1.82 от 22.11 вопросы",
+  "description": "Веб-приложение ",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
