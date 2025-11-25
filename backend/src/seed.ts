@@ -1,21 +1,21 @@
-
 import { User } from './db';
 import * as bcrypt from 'bcrypt';
 
 export const seedDatabase = async () => {
     try {
+
         // 1. Main Admin
-        const mainAdminId = '000001';
-        const mainAdminExists = await User.findByPk(mainAdminId);
+        const mainAdminEmail = 'start@maneg.pro';
+        const mainAdminExists = await User.findOne({ where: { email: mainAdminEmail } });
 
         if (!mainAdminExists) {
             console.log('Creating default Main Admin...');
+
             const salt = await bcrypt.genSalt(10);
-            const passwordHash = await bcrypt.hash('1', salt); // Default password from mock
+            const passwordHash = await bcrypt.hash('1', salt);
 
             await User.create({
-                id: mainAdminId,
-                email: 'start@maneg.pro',
+                email: mainAdminEmail,
                 passwordHash,
                 salt,
                 name: 'Admin',
@@ -45,21 +45,22 @@ export const seedDatabase = async () => {
                     newLocationRequest: 'push'
                 }
             });
+
             console.log('Main Admin created.');
         }
 
         // 2. Backup Admin
-        const backupAdminId = '000003';
-        const backupAdminExists = await User.findByPk(backupAdminId);
+        const backupAdminEmail = 'a1@gmail.com';
+        const backupAdminExists = await User.findOne({ where: { email: backupAdminEmail } });
 
         if (!backupAdminExists) {
             console.log('Creating default Backup Admin...');
+
             const salt = await bcrypt.genSalt(10);
-            const passwordHash = await bcrypt.hash('BackupAdminPass2024!', salt); // Default password from mock
+            const passwordHash = await bcrypt.hash('BackupAdminPass2024!', salt);
 
             await User.create({
-                id: backupAdminId,
-                email: 'a1@gmail.com',
+                email: backupAdminEmail,
                 passwordHash,
                 salt,
                 name: 'Backup',
@@ -89,6 +90,7 @@ export const seedDatabase = async () => {
                     newLocationRequest: 'push'
                 }
             });
+
             console.log('Backup Admin created.');
         }
 
