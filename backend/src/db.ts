@@ -1,3 +1,4 @@
+
 import { Sequelize, DataTypes, Model, Optional } from 'sequelize';
 import * as dotenv from 'dotenv';
 
@@ -18,7 +19,10 @@ const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgresql://postgr
 
 // User
 export const User = sequelize.define('User', {
-    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    id: { 
+        type: DataTypes.STRING(6), // Changed to STRING length 6
+        primaryKey: true 
+    },
     email: { type: DataTypes.STRING, unique: true, allowNull: false },
     passwordHash: { type: DataTypes.STRING, allowNull: false },
     salt: { type: DataTypes.STRING, allowNull: false },
@@ -43,13 +47,37 @@ export const User = sequelize.define('User', {
     subscription: { type: DataTypes.JSON },
     referralCount: { type: DataTypes.INTEGER, defaultValue: 0 },
     referralPurchaseCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-    referredBy: { type: DataTypes.UUID }, // FK handled by association usually, but kept for direct access
+    referredBy: { type: DataTypes.STRING }, // Changed to STRING
     pendingTrainerRequestFrom: { type: DataTypes.STRING },
     readAnnouncementIds: { type: DataTypes.JSON },
     readNewsIds: { type: DataTypes.JSON },
     readLibraryPostIds: { type: DataTypes.JSON },
     lastReadTimestamps: { type: DataTypes.JSON },
     canReplyToAdmin: { type: DataTypes.BOOLEAN, defaultValue: false },
+}, {
+    hooks: {
+        beforeCreate: async (user: any) => {
+            if (user.id) return; // If ID is already provided (e.g. seeding admins), skip generation
+            
+            let uniqueFound = false;
+            let attempts = 0;
+            while (!uniqueFound && attempts < 10) {
+                // Generate random 6 digit number
+                const randomId = Math.floor(100000 + Math.random() * 900000).toString();
+                
+                // Check if exists
+                const existing = await User.findByPk(randomId);
+                if (!existing) {
+                    user.id = randomId;
+                    uniqueFound = true;
+                }
+                attempts++;
+            }
+            if (!uniqueFound) {
+                throw new Error('Failed to generate unique ID');
+            }
+        }
+    }
 });
 
 // TrainingSession
@@ -63,7 +91,7 @@ export const TrainingSession = sequelize.define('TrainingSession', {
     status: { type: DataTypes.STRING },
     photoUrl: { type: DataTypes.TEXT },
     photoTimestamp: { type: DataTypes.DATE },
-    authorId: { type: DataTypes.UUID, allowNull: false },
+    authorId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING to match User ID
     goals: { type: DataTypes.JSON },
     hiddenBy: { type: DataTypes.JSON }
 });
@@ -72,7 +100,7 @@ export const TrainingSession = sequelize.define('TrainingSession', {
 export const TrainingParticipant = sequelize.define('TrainingParticipant', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     sessionId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     confirmed: { type: DataTypes.BOOLEAN, defaultValue: false },
     role: { type: DataTypes.STRING, allowNull: false } // Enum in prisma, string here for simplicity or ENUM
 });
@@ -81,7 +109,7 @@ export const TrainingParticipant = sequelize.define('TrainingParticipant', {
 export const TrainingRating = sequelize.define('TrainingRating', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     sessionId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     score: { type: DataTypes.INTEGER, allowNull: false }
 });
 
@@ -89,7 +117,7 @@ export const TrainingRating = sequelize.define('TrainingRating', {
 export const Skill = sequelize.define('Skill', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     name: { type: DataTypes.STRING, allowNull: false },
-    ownerId: { type: DataTypes.STRING, allowNull: false }
+    ownerId: { type: DataTypes.STRING, allowNull: false } // Changed to STRING
 });
 
 // Announcement
@@ -100,8 +128,8 @@ export const Announcement = sequelize.define('Announcement', {
     timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     publishTimestamp: { type: DataTypes.DATE },
     status: { type: DataTypes.ENUM('published', 'pending', 'rejected', 'trashed'), allowNull: false },
-    authorId: { type: DataTypes.UUID, allowNull: false },
-    submittedById: { type: DataTypes.UUID },
+    authorId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
+    submittedById: { type: DataTypes.STRING }, // Changed to STRING
     isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
     isModerated: { type: DataTypes.BOOLEAN, defaultValue: false },
     moderatedPrice: { type: DataTypes.INTEGER },
@@ -122,7 +150,7 @@ export const NewsItem = sequelize.define('NewsItem', {
     content: { type: DataTypes.TEXT, allowNull: false },
     timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     publishTimestamp: { type: DataTypes.DATE },
-    authorId: { type: DataTypes.UUID, allowNull: false },
+    authorId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
     deletionTimestamp: { type: DataTypes.DATE },
     targetRoles: { type: DataTypes.JSON },
@@ -140,7 +168,7 @@ export const LibraryPost = sequelize.define('LibraryPost', {
     content: { type: DataTypes.TEXT, allowNull: false },
     timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     publishTimestamp: { type: DataTypes.DATE },
-    authorId: { type: DataTypes.UUID, allowNull: false },
+    authorId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
     deletionTimestamp: { type: DataTypes.DATE },
     targetRoles: { type: DataTypes.JSON },
@@ -183,7 +211,7 @@ export const PollOption = sequelize.define('PollOption', {
 export const PollVote = sequelize.define('PollVote', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     pollId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     optionIds: { type: DataTypes.JSON, allowNull: false }
 });
 
@@ -206,7 +234,7 @@ export const QuizOption = sequelize.define('QuizOption', {
 export const QuizSubmission = sequelize.define('QuizSubmission', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     quizId: { type: DataTypes.UUID, allowNull: false },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     optionIds: { type: DataTypes.JSON, allowNull: false }
 });
 
@@ -220,13 +248,13 @@ export const Conversation = sequelize.define('Conversation', {
 // Join table for Conversation <-> User
 export const ConversationParticipant = sequelize.define('ConversationParticipant', {
     conversationId: { type: DataTypes.UUID, references: { model: Conversation, key: 'id' } },
-    userId: { type: DataTypes.UUID, references: { model: User, key: 'id' } }
+    userId: { type: DataTypes.STRING, references: { model: User, key: 'id' } } // Changed to STRING
 });
 
 export const ChatMessage = sequelize.define('ChatMessage', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     chatId: { type: DataTypes.UUID, allowNull: false },
-    senderId: { type: DataTypes.UUID, allowNull: false },
+    senderId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     text: { type: DataTypes.TEXT },
     timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     status: { type: DataTypes.STRING, defaultValue: 'sent' },
@@ -239,7 +267,7 @@ export const DeveloperMessage = sequelize.define('DeveloperMessage', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
     subject: { type: DataTypes.STRING, allowNull: false },
     message: { type: DataTypes.TEXT, allowNull: false },
-    senderId: { type: DataTypes.UUID, allowNull: false },
+    senderId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
     status: { type: DataTypes.STRING, defaultValue: 'open' },
@@ -263,35 +291,35 @@ export const AppSettings = sequelize.define('AppSettings', {
 
 export const BonusTransaction = sequelize.define('BonusTransaction', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     amount: { type: DataTypes.INTEGER, allowNull: false },
     description: { type: DataTypes.STRING, allowNull: false },
     timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    adminId: { type: DataTypes.UUID },
+    adminId: { type: DataTypes.STRING }, // Changed to STRING
     source: { type: DataTypes.STRING },
-    sourceUserId: { type: DataTypes.UUID },
+    sourceUserId: { type: DataTypes.STRING }, // Changed to STRING
     expiresAt: { type: DataTypes.DATE },
     remainingAmount: { type: DataTypes.INTEGER },
 });
 
 export const NewLocationRequest = sequelize.define('NewLocationRequest', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     submittedCity: { type: DataTypes.STRING, allowNull: false },
     submittedRegion: { type: DataTypes.STRING, allowNull: false },
     submittedCountry: { type: DataTypes.STRING, allowNull: false },
     status: { type: DataTypes.STRING, allowNull: false },
     requestTimestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    resolvedBy: { type: DataTypes.STRING },
+    resolvedBy: { type: DataTypes.STRING }, // Changed to STRING
     resolvedTimestamp: { type: DataTypes.DATE },
 });
 
 export const PasswordResetRequest = sequelize.define('PasswordResetRequest', {
     id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-    userId: { type: DataTypes.UUID, allowNull: false },
+    userId: { type: DataTypes.STRING, allowNull: false }, // Changed to STRING
     requestTimestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     status: { type: DataTypes.STRING, allowNull: false },
-    resolvedBy: { type: DataTypes.STRING },
+    resolvedBy: { type: DataTypes.STRING }, // Changed to STRING
     resolvedTimestamp: { type: DataTypes.DATE },
 });
 
