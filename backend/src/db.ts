@@ -6,7 +6,7 @@ dotenv.config();
 const sequelize = new Sequelize({
   username: 'gen_user',
   password: 'r)H~0!zxQP-.$@',
-  database: 'default_db',
+  database: 'horse',
   host: '77.232.128.138',
   port: 5432,
   dialect: 'postgres',
@@ -23,7 +23,14 @@ const sequelize = new Sequelize({
 
 // User
 export const User = sequelize.define('User', {
-  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  id: {
+    type: DataTypes.STRING(6),
+    primaryKey: true,
+    allowNull: false,
+    defaultValue: () => {
+      return Math.random().toString(36).substring(2, 8).toUpperCase();
+    },
+  },
   email: { type: DataTypes.STRING, unique: true, allowNull: false },
   passwordHash: { type: DataTypes.STRING, allowNull: false },
   salt: { type: DataTypes.STRING, allowNull: false },
@@ -48,7 +55,10 @@ export const User = sequelize.define('User', {
   subscription: { type: DataTypes.JSON },
   referralCount: { type: DataTypes.INTEGER, defaultValue: 0 },
   referralPurchaseCount: { type: DataTypes.INTEGER, defaultValue: 0 },
-  referredBy: { type: DataTypes.UUID }, // FK handled by association usually, but kept for direct access
+
+  // FIXED
+  referredBy: { type: DataTypes.STRING(6) },
+
   pendingTrainerRequestFrom: { type: DataTypes.STRING },
   readAnnouncementIds: { type: DataTypes.JSON },
   readNewsIds: { type: DataTypes.JSON },
@@ -68,7 +78,7 @@ export const TrainingSession = sequelize.define('TrainingSession', {
   status: { type: DataTypes.STRING },
   photoUrl: { type: DataTypes.TEXT },
   photoTimestamp: { type: DataTypes.DATE },
-  authorId: { type: DataTypes.UUID, allowNull: false },
+  authorId: { type: DataTypes.STRING(6), allowNull: false },
   goals: { type: DataTypes.JSON },
   hiddenBy: { type: DataTypes.JSON },
 });
@@ -77,7 +87,7 @@ export const TrainingSession = sequelize.define('TrainingSession', {
 export const TrainingParticipant = sequelize.define('TrainingParticipant', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   sessionId: { type: DataTypes.UUID, allowNull: false },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   confirmed: { type: DataTypes.BOOLEAN, defaultValue: false },
   role: { type: DataTypes.STRING, allowNull: false }, // Enum in prisma, string here for simplicity or ENUM
 });
@@ -86,7 +96,7 @@ export const TrainingParticipant = sequelize.define('TrainingParticipant', {
 export const TrainingRating = sequelize.define('TrainingRating', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   sessionId: { type: DataTypes.UUID, allowNull: false },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   score: { type: DataTypes.INTEGER, allowNull: false },
 });
 
@@ -94,7 +104,7 @@ export const TrainingRating = sequelize.define('TrainingRating', {
 export const Skill = sequelize.define('Skill', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING, allowNull: false },
-  ownerId: { type: DataTypes.STRING, allowNull: false },
+  ownerId: { type: DataTypes.STRING(6), allowNull: false },
 });
 
 // Announcement
@@ -105,8 +115,8 @@ export const Announcement = sequelize.define('Announcement', {
   timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   publishTimestamp: { type: DataTypes.DATE },
   status: { type: DataTypes.ENUM('published', 'pending', 'rejected', 'trashed'), allowNull: false },
-  authorId: { type: DataTypes.UUID, allowNull: false },
-  submittedById: { type: DataTypes.UUID },
+  authorId: { type: DataTypes.STRING(6), allowNull: false },
+  submittedById: { type: DataTypes.STRING(6) },
   isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
   isModerated: { type: DataTypes.BOOLEAN, defaultValue: false },
   moderatedPrice: { type: DataTypes.INTEGER },
@@ -127,7 +137,7 @@ export const NewsItem = sequelize.define('NewsItem', {
   content: { type: DataTypes.TEXT, allowNull: false },
   timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   publishTimestamp: { type: DataTypes.DATE },
-  authorId: { type: DataTypes.UUID, allowNull: false },
+  authorId: { type: DataTypes.STRING(6), allowNull: false },
   isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
   deletionTimestamp: { type: DataTypes.DATE },
   targetRoles: { type: DataTypes.JSON },
@@ -145,7 +155,7 @@ export const LibraryPost = sequelize.define('LibraryPost', {
   content: { type: DataTypes.TEXT, allowNull: false },
   timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   publishTimestamp: { type: DataTypes.DATE },
-  authorId: { type: DataTypes.UUID, allowNull: false },
+  authorId: { type: DataTypes.STRING(6), allowNull: false },
   isPinned: { type: DataTypes.BOOLEAN, defaultValue: false },
   deletionTimestamp: { type: DataTypes.DATE },
   targetRoles: { type: DataTypes.JSON },
@@ -188,7 +198,7 @@ export const PollOption = sequelize.define('PollOption', {
 export const PollVote = sequelize.define('PollVote', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   pollId: { type: DataTypes.UUID, allowNull: false },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   optionIds: { type: DataTypes.JSON, allowNull: false },
 });
 
@@ -211,7 +221,7 @@ export const QuizOption = sequelize.define('QuizOption', {
 export const QuizSubmission = sequelize.define('QuizSubmission', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   quizId: { type: DataTypes.UUID, allowNull: false },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   optionIds: { type: DataTypes.JSON, allowNull: false },
 });
 
@@ -225,13 +235,13 @@ export const Conversation = sequelize.define('Conversation', {
 // Join table for Conversation <-> User
 export const ConversationParticipant = sequelize.define('ConversationParticipant', {
   conversationId: { type: DataTypes.UUID, references: { model: Conversation, key: 'id' } },
-  userId: { type: DataTypes.UUID, references: { model: User, key: 'id' } },
+  userId: { type: DataTypes.STRING(6), references: { model: User, key: 'id' } },
 });
 
 export const ChatMessage = sequelize.define('ChatMessage', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   chatId: { type: DataTypes.UUID, allowNull: false },
-  senderId: { type: DataTypes.UUID, allowNull: false },
+  senderId: { type: DataTypes.STRING(6), allowNull: false },
   text: { type: DataTypes.TEXT },
   timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   status: { type: DataTypes.STRING, defaultValue: 'sent' },
@@ -244,7 +254,7 @@ export const DeveloperMessage = sequelize.define('DeveloperMessage', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   subject: { type: DataTypes.STRING, allowNull: false },
   message: { type: DataTypes.TEXT, allowNull: false },
-  senderId: { type: DataTypes.UUID, allowNull: false },
+  senderId: { type: DataTypes.STRING(6), allowNull: false },
   timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   isRead: { type: DataTypes.BOOLEAN, defaultValue: false },
   status: { type: DataTypes.STRING, defaultValue: 'open' },
@@ -268,20 +278,20 @@ export const AppSettings = sequelize.define('AppSettings', {
 
 export const BonusTransaction = sequelize.define('BonusTransaction', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   amount: { type: DataTypes.INTEGER, allowNull: false },
   description: { type: DataTypes.STRING, allowNull: false },
   timestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-  adminId: { type: DataTypes.UUID },
+  adminId: { type: DataTypes.STRING(6) },
   source: { type: DataTypes.STRING },
-  sourceUserId: { type: DataTypes.UUID },
+  sourceUserId: { type: DataTypes.STRING(6) },
   expiresAt: { type: DataTypes.DATE },
   remainingAmount: { type: DataTypes.INTEGER },
 });
 
 export const NewLocationRequest = sequelize.define('NewLocationRequest', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   submittedCity: { type: DataTypes.STRING, allowNull: false },
   submittedRegion: { type: DataTypes.STRING, allowNull: false },
   submittedCountry: { type: DataTypes.STRING, allowNull: false },
@@ -293,7 +303,7 @@ export const NewLocationRequest = sequelize.define('NewLocationRequest', {
 
 export const PasswordResetRequest = sequelize.define('PasswordResetRequest', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  userId: { type: DataTypes.UUID, allowNull: false },
+  userId: { type: DataTypes.STRING(6), allowNull: false },
   requestTimestamp: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   status: { type: DataTypes.STRING, allowNull: false },
   resolvedBy: { type: DataTypes.STRING },
