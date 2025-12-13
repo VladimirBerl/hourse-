@@ -168,6 +168,13 @@ const LoginPage: React.FC = () => {
 
   const flatLocations = useMemo(() => {
     const locations = data?.locations || LOCATION_DATA;
+    if (!locations || Object.keys(locations).length === 0) {
+      return Object.entries(LOCATION_DATA).flatMap(([country, regions]) => 
+        Object.entries(regions).flatMap(([region, cities]) => 
+          cities.map(city => ({ city, region, country }))
+        )
+      );
+    }
     return Object.entries(locations).flatMap(([country, regions]) => 
         Object.entries(regions).flatMap(([region, cities]) => 
             cities.map(city => ({ city, region, country }))
@@ -177,8 +184,12 @@ const LoginPage: React.FC = () => {
 
   const suggestions = useMemo(() => {
       if (!cityInput) return [];
-      const search = cityInput.toLowerCase();
-      return flatLocations.filter(loc => loc.city.toLowerCase().startsWith(search)).slice(0, 10);
+      const search = cityInput.toLowerCase().trim();
+      if (!search) return [];
+      return flatLocations.filter(loc => {
+          const cityLower = loc.city.toLowerCase();
+          return cityLower.includes(search);
+      }).slice(0, 10);
   }, [cityInput, flatLocations]);
 
   const handleCityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -233,10 +244,8 @@ const LoginPage: React.FC = () => {
     }
     if (!auth) return;
 
-    if (auth.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
-        setError('Пользователь с таким email уже существует.');
-        return;
-    }
+    // Убрана клиентская проверка - сервер является единственным источником правды
+    // Проверка на дубликаты email будет выполнена на сервере
 
     setIsLoading(true);
     const newUserPartial = { name, surname, country, region, city, email, password, role: isSpectator ? UserRole.Spectator : role, referredBy: referredBy || undefined };
@@ -247,7 +256,9 @@ const LoginPage: React.FC = () => {
           setError('Ошибка регистрации. Возможно, email уже занят.');
         }
     } catch (err: any) {
-        setError(err.message || 'Произошла ошибка регистрации.');
+        // Обрабатываем ошибку от сервера
+        const errorMessage = err.message || err.response?.data?.message || 'Произошла ошибка регистрации.';
+        setError(errorMessage);
     } finally {
         setIsLoading(false);
     }

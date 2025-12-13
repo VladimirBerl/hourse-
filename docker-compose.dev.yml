@@ -1,0 +1,61 @@
+# Docker Compose для разработки (с hot-reload)
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: horse-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: postgres
+    ports:
+      - "4454:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - horse-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: horse-backend-dev
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      DB_NAME: postgres
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key}
+      PORT: 3001
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./backend/uploads:/app/uploads
+      - ./backend/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - horse-network
+    command: npm run dev
+
+networks:
+  horse-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+
+

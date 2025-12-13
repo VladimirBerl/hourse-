@@ -68,7 +68,11 @@ app.use('/api/requests', requestRouter);
 const port = process.env.PORT || 3001;
 
 // Sync Database and start server
-sequelize.sync({ alter: true }).then(async () => {
+sequelize.authenticate().then(async () => {
+    console.log('Database connection established successfully.');
+    
+    // Sync database - create tables if they don't exist
+    await sequelize.sync({ alter: true });
     console.log('Database synced via Sequelize');
     
     // Seed database with initial admins
@@ -79,4 +83,5 @@ sequelize.sync({ alter: true }).then(async () => {
     });
 }).catch((err) => {
     console.error('Failed to sync database:', err);
+    process.exit(1);
 });

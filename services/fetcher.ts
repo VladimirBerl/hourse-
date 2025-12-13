@@ -1,7 +1,7 @@
 
 // Fetch wrapper for making HTTP requests to the backend
 
-const BASE_URL = 'http://localhost:3001/api'; // Should be env variable in prod
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 interface FetcherOptions extends RequestInit {
     token?: string;

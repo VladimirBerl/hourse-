@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts",
-    "migrate": "sequelize-cli db:migrate"
+    "migrate": "sequelize-cli db:migrate",
+    "init-db": "ts-node src/init-db.ts",
+    "fix-user": "ts-node src/fix-user.ts"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

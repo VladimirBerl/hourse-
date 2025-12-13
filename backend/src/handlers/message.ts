@@ -4,11 +4,14 @@ import { DeveloperMessage } from '../db';
 
 export const getAllMessages = async (req: any, res: any) => {
     const { user: currentUser } = req;
-    if (currentUser.role !== 'Admin') {
-        return res.status(403).json({ message: 'Forbidden.' });
-    }
     try {
+        // Admins can see all messages, regular users can only see their own messages
+        const whereClause = currentUser.role === 'Admin' 
+            ? {} 
+            : { senderId: currentUser.id };
+        
         const messages = await DeveloperMessage.findAll({
+            where: whereClause,
             order: [['timestamp', 'DESC']]
         });
         res.status(200).json(messages);

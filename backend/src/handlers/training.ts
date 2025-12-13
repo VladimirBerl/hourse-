@@ -7,7 +7,15 @@ export const getAllTrainings = async (req: any, res: any) => {
         const trainings = await TrainingSession.findAll({
              include: [{ model: TrainingParticipant, as: 'participants' }]
         });
-        res.status(200).json(trainings);
+        // Ensure ratings is properly serialized (Sequelize should handle this automatically, but ensure it's an array)
+        const serializedTrainings = trainings.map(training => {
+            const trainingData = training.toJSON();
+            if (trainingData.ratings === null || trainingData.ratings === undefined) {
+                trainingData.ratings = [];
+            }
+            return trainingData;
+        });
+        res.status(200).json(serializedTrainings);
     } catch (e) {
         console.error(e);
         res.status(500).json({ message: 'Error fetching trainings.' });
@@ -50,7 +58,15 @@ export const addTraining = async (req: any, res: any) => {
         const allTrainings = await TrainingSession.findAll({
             include: [{ model: TrainingParticipant, as: 'participants' }]
         });
-        res.status(201).json(allTrainings);
+        // Ensure ratings is properly serialized
+        const serializedTrainings = allTrainings.map(training => {
+            const trainingData = training.toJSON();
+            if (trainingData.ratings === null || trainingData.ratings === undefined) {
+                trainingData.ratings = [];
+            }
+            return trainingData;
+        });
+        res.status(201).json(serializedTrainings);
 
     } catch (e) {
         console.error(e);
@@ -78,6 +94,11 @@ export const updateTraining = async (req: any, res: any) => {
 
         const { participants: newParticipantsData, ...updateData } = req.body;
         
+        // Ensure ratings is properly handled if present
+        if (updateData.ratings !== undefined) {
+            updateData.ratings = Array.isArray(updateData.ratings) ? updateData.ratings : null;
+        }
+        
         await training.update(updateData);
 
         if (newParticipantsData) {
@@ -95,7 +116,15 @@ export const updateTraining = async (req: any, res: any) => {
         const allTrainings = await TrainingSession.findAll({
             include: [{ model: TrainingParticipant, as: 'participants' }]
         });
-        res.status(200).json(allTrainings);
+        // Ensure ratings is properly serialized
+        const serializedTrainings = allTrainings.map(training => {
+            const trainingData = training.toJSON();
+            if (trainingData.ratings === null || trainingData.ratings === undefined) {
+                trainingData.ratings = [];
+            }
+            return trainingData;
+        });
+        res.status(200).json(serializedTrainings);
         
     } catch (e) {
         console.error(e);
@@ -126,7 +155,15 @@ export const deleteTraining = async (req: any, res: any) => {
         const allTrainings = await TrainingSession.findAll({
             include: [{ model: TrainingParticipant, as: 'participants' }]
         });
-        res.status(200).json(allTrainings);
+        // Ensure ratings is properly serialized
+        const serializedTrainings = allTrainings.map(training => {
+            const trainingData = training.toJSON();
+            if (trainingData.ratings === null || trainingData.ratings === undefined) {
+                trainingData.ratings = [];
+            }
+            return trainingData;
+        });
+        res.status(200).json(serializedTrainings);
 
     } catch (e) {
         console.error(e);

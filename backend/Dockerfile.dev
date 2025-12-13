@@ -1,0 +1,22 @@
+# Backend Dockerfile для разработки
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install nodemon globally
+RUN npm install -g nodemon ts-node
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Expose port
+EXPOSE 3001
+
+# Start in dev mode (with nodemon)
+CMD ["npm", "run", "dev"]
+
+

@@ -51,7 +51,11 @@ export const addLibraryPost = async (req: any, res: any) => {
             const libraryPostId = newPost.getDataValue('id');
 
             if (images && images.length > 0) {
-                await PostImage.bulkCreate(images.map((img: any) => ({ ...img, libraryPostId })), { transaction: t });
+               await PostImage.bulkCreate(images.map((img: any) => {
+                    // Extract only valid PostImage fields (exclude id which is auto-generated)
+                    const { id, ...imageData } = img;
+                    return { ...imageData, libraryPostId };
+                }), { transaction: t });
             }
 
             if (poll) {
@@ -62,9 +66,31 @@ export const addLibraryPost = async (req: any, res: any) => {
             }
 
             if (quiz) {
-                const newQuiz = await Quiz.create({ ...quiz, libraryPostId }, { transaction: t });
-                if (quiz.options && quiz.options.length > 0) {
-                    await QuizOption.bulkCreate(quiz.options.map((opt: any) => ({ ...opt, quizId: newQuiz.getDataValue('id') })), { transaction: t });
+                // Extract only valid Quiz fields (exclude id, options, submissions which are handled separately)
+                const { id, options, submissions, correctOptionIds, ...quizData } = quiz;
+                const newQuiz = await Quiz.create({ ...quizData, libraryPostId, correctOptionIds: [] }, { transaction: t });
+                const quizId = newQuiz.getDataValue('id');
+                
+                if (options && options.length > 0) {
+                    // Create options and build mapping from temporary IDs to real IDs
+                    const tempIdToRealIdMap: Record<string, string> = {};
+                    const createdOptions = [];
+                    
+                    for (const opt of options) {
+                        const { id: tempId, ...optionData } = opt;
+                        const createdOption = await QuizOption.create({ ...optionData, quizId }, { transaction: t });
+                        const realId = createdOption.getDataValue('id');
+                        tempIdToRealIdMap[tempId] = realId;
+                        createdOptions.push(createdOption);
+                    }
+                    
+                    // Map correctOptionIds from temporary IDs to real IDs
+                    const realCorrectOptionIds = correctOptionIds
+                        ? correctOptionIds.map((tempId: string) => tempIdToRealIdMap[tempId]).filter(Boolean)
+                        : [];
+                    
+                    // Update quiz with correct option IDs
+                    await newQuiz.update({ correctOptionIds: realCorrectOptionIds }, { transaction: t });
                 }
             }
         });
@@ -99,7 +125,11 @@ export const updateLibraryPost = async (req: any, res: any) => {
              if (images !== undefined) {
                 await PostImage.destroy({ where: { libraryPostId: id }, transaction: tx });
                 if (images.length > 0) {
-                     await PostImage.bulkCreate(images.map((img: any) => ({ url: img.url, position: img.position, libraryPostId: id })), { transaction: tx });
+                     await PostImage.bulkCreate(images.map((img: any) => {
+                        // Extract only valid PostImage fields (exclude id which is auto-generated)
+                        const { id: imgId, ...imageData } = img;
+                        return { ...imageData, libraryPostId: id };
+                    }), { transaction: tx });
                 }
             }
         });

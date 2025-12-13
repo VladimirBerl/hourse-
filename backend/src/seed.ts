@@ -98,3 +98,4 @@ export const seedDatabase = async () => {
         console.error('Error seeding database:', error);
     }
 };
+

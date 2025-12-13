@@ -2,6 +2,7 @@ import React, { useContext, useState } from 'react';
 import { AuthContext } from '../App';
 import { User, UserRole } from '../types';
 import ConfirmationModal from '../components/ConfirmationModal';
+import * as api from '../services/api';
 
 const AddStudentModal: React.FC<{ isOpen: boolean; onClose: () => void; onAdd: (studentId: string) => Promise<void>; }> = ({ isOpen, onClose, onAdd }) => {
     const [studentId, setStudentId] = useState('');
@@ -72,45 +73,53 @@ const MyStudentsPage: React.FC = () => {
             return;
         }
 
-        const updatedUsers = users.map(u => {
-            if (u.id === user.id) { // Update trainer
-                return { ...u, pendingStudents: [...(u.pendingStudents || []), studentId] };
+        try {
+            const token = sessionStorage.getItem('authToken');
+            if (!token) {
+                setError('Необходима авторизация.');
+                return;
             }
-            if (u.id === student.id) { // Update student
-                return { ...u, pendingTrainerRequestFrom: user.id };
+            
+            const result = await api.apiSendLinkRequest(studentId, token);
+            if (result.success) {
+                // Refresh users list to get updated state
+                const freshUsers = await api.apiGetAllUsers();
+                await updateUsers(freshUsers);
+                setMessage(`Запрос на добавление ученика ${student.name} ${student.surname} успешно отправлен.`);
+                setAddModalOpen(false);
+            } else {
+                setError(result.message || 'Ошибка при отправке запроса.');
             }
-            return u;
-        });
-
-        await updateUsers(updatedUsers);
-        setMessage(`Запрос на добавление ученика ${student.name} ${student.surname} успешно отправлен.`);
-        setAddModalOpen(false);
+        } catch (error: any) {
+            console.error('Error sending link request:', error);
+            setError(error.message || 'Ошибка при отправке запроса.');
+        }
     };
 
     const handleStudentRequestResponse = async (studentId: string, accept: boolean) => {
          const student = activeUsers.find(u => u.id === studentId);
          if (!student) return;
 
-         const updatedUsers = users.map(u => {
-            // Update trainer
-            if (u.id === user.id) {
-                return { 
-                    ...u,
-                    studentRequests: u.studentRequests?.filter(id => id !== studentId),
-                    linkedUsers: accept ? [...u.linkedUsers, studentId] : u.linkedUsers,
-                };
+         try {
+            const token = sessionStorage.getItem('authToken');
+            if (!token) {
+                setError('Необходима авторизация.');
+                return;
             }
-            // Update student
-            if (u.id === studentId) {
-                return {
-                    ...u,
-                    linkedUsers: accept ? [...u.linkedUsers, user.id] : u.linkedUsers,
-                };
+            
+            const result = await api.apiRespondToLinkRequest(studentId, accept, token);
+            if (result.success) {
+                // Refresh users list to get updated state
+                const freshUsers = await api.apiGetAllUsers();
+                await updateUsers(freshUsers);
+                setMessage(accept ? `Ученик ${student.name} добавлен.` : `Запрос от ${student.name} отклонен.`);
+            } else {
+                setError(result.message || 'Ошибка при обработке запроса.');
             }
-            return u;
-         });
-         await updateUsers(updatedUsers);
-         setMessage(accept ? `Ученик ${student.name} добавлен.` : `Запрос от ${student.name} отклонен.`);
+         } catch (error: any) {
+            console.error('Error responding to link request:', error);
+            setError(error.message || 'Ошибка при обработке запроса.');
+         }
     };
     
     const handleUnlinkClick = (student: User) => {

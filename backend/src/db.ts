@@ -3,20 +3,15 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-const sequelize = new Sequelize({
-  username: 'gen_user',
-  password: 'r)H~0!zxQP-.$@',
-  database: 'horse',
-  host: '77.232.128.138',
-  port: 5432,
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbPort = process.env.DB_PORT || '4454';
+const dbUser = process.env.DB_USER || 'postgres';
+const dbPassword = process.env.DB_PASSWORD || 'admin';
+const dbName = process.env.DB_NAME || 'postgres';
+
+const sequelize = new Sequelize(`postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${dbName}`, {
   dialect: 'postgres',
   logging: false,
-  pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000,
-  },
 });
 
 // --- Models ---
@@ -81,6 +76,7 @@ export const TrainingSession = sequelize.define('TrainingSession', {
   authorId: { type: DataTypes.STRING(6), allowNull: false },
   goals: { type: DataTypes.JSON },
   hiddenBy: { type: DataTypes.JSON },
+  ratings: { type: DataTypes.JSON },
 });
 
 // TrainingParticipant

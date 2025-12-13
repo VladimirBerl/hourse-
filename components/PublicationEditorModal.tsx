@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserRole, Announcement, NewsItem, LibraryPost, User, PostImage, Poll, PollOption, Quiz, QuizOption, SubscriptionTier } from '../types';
+import { UserRole, Announcement, NewsItem, LibraryPost, User, PostImage, Poll, PollOption, Quiz, QuizOption, SubscriptionTier, LOCATION_DATA } from '../types';
 
 interface PublicationEditorModalProps {
     isOpen: boolean;
@@ -26,6 +26,7 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
     const [targetCities, setTargetCities] = useState<string[]>([]);
     const [selectAllLocations, setSelectAllLocations] = useState(true);
     const [locationSearch, setLocationSearch] = useState('');
+    const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
     const [targetMaximumOnly, setTargetMaximumOnly] = useState(false);
 
     // Auto-delete state
@@ -51,31 +52,53 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
     const [correctOptionIds, setCorrectOptionIds] = useState<string[]>([]);
     const [allowMultipleAnswers, setAllowMultipleAnswers] = useState(false);
 
+    // Flat locations list for autocomplete
+    const flatLocations = useMemo(() => {
+        const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
+        return Object.entries(locs).flatMap(([country, regions]) => 
+            Object.entries(regions || {}).flatMap(([region, cities]) => 
+                (cities || []).map(city => ({ city, region, country }))
+            )
+        );
+    }, [locations]);
+
+    // Autocomplete suggestions
+    const locationSuggestions = useMemo(() => {
+        if (!locationSearch.trim()) return [];
+        const search = locationSearch.toLowerCase().trim();
+        return flatLocations.filter(loc => 
+            loc.city.toLowerCase().includes(search) ||
+            loc.region.toLowerCase().includes(search) ||
+            loc.country.toLowerCase().includes(search)
+        ).slice(0, 10);
+    }, [locationSearch, flatLocations]);
+
     const filteredLocations = useMemo(() => {
+        const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
         const normalizedSearch = locationSearch.toLowerCase().trim();
         if (!normalizedSearch) {
-            return locations;
+            return locs;
         }
     
         const result: Record<string, Record<string, string[]>> = {};
     
-        for (const country in locations) {
+        for (const country in locs) {
             if (country.toLowerCase().includes(normalizedSearch)) {
-                result[country] = locations[country];
+                result[country] = locs[country];
                 continue;
             }
     
             const matchingRegions: Record<string, string[]> = {};
             let countryHasMatch = false;
     
-            for (const region in locations[country]) {
+            for (const region in locs[country] || {}) {
                 if (region.toLowerCase().includes(normalizedSearch)) {
-                    matchingRegions[region] = locations[country][region];
+                    matchingRegions[region] = locs[country][region];
                     countryHasMatch = true;
                     continue;
                 }
     
-                const matchingCities = locations[country][region].filter(city =>
+                const matchingCities = (locs[country][region] || []).filter(city =>
                     city.toLowerCase().includes(normalizedSearch)
                 );
     
@@ -290,12 +313,12 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
         const finalData = {
             title,
             content,
-            targetSubscriptionTiers: targetMaximumOnly ? [SubscriptionTier.Maximum] : undefined,
-            targetCountries: selectAllLocations ? undefined : targetCountries,
-            targetRegions: selectAllLocations ? undefined : targetRegions,
-            targetCities: selectAllLocations ? undefined : targetCities,
+            targetSubscriptionTiers: targetMaximumOnly ? [SubscriptionTier.Maximum] : [],
+            targetCountries: selectAllLocations ? undefined : (targetCountries.length > 0 ? targetCountries : undefined),
+            targetRegions: selectAllLocations ? undefined : (targetRegions.length > 0 ? targetRegions : undefined),
+            targetCities: selectAllLocations ? undefined : (targetCities.length > 0 ? targetCities : undefined),
             targetRoles: targetRoles.length > 0 ? targetRoles : undefined,
-            publishTimestamp,
+            publishTimestamp: isScheduled ? publishTimestamp : null,
             images: images.length > 0 ? images : undefined,
             poll: hasPoll ? poll : undefined,
             quiz: hasQuiz ? quiz : undefined,
@@ -367,14 +390,31 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
     
     // Target Audience Handlers
     const handleRoleChange = (role: UserRole, isChecked: boolean) => setTargetRoles(prev => isChecked ? [...prev, role] : prev.filter(r => r !== role));
+    const handleLocationSuggestionClick = (location: { city: string, region: string, country: string }) => {
+        setLocationSearch('');
+        setShowLocationSuggestions(false);
+        // Disable "select all locations" when manually selecting
+        setSelectAllLocations(false);
+        // Automatically select the location
+        handleLocationChange('city', location.city, true, { country: location.country, region: location.region });
+    };
+
     const handleLocationChange = (type: 'country' | 'region' | 'city', value: string, isChecked: boolean, context?: { country?: string; region?: string }) => {
+        // Disable "select all locations" when manually selecting
+        if (isChecked) {
+            setSelectAllLocations(false);
+        }
+        
+        // Use locations from props or fallback to LOCATION_DATA
+        const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
+        
         let nextCountries = new Set(targetCountries);
         let nextRegions = new Set(targetRegions);
         let nextCities = new Set(targetCities);
     
         if (type === 'country') {
-            const regionsInCountry = Object.keys(locations[value] || {});
-            const citiesInCountry = regionsInCountry.flatMap(region => locations[value][region] || []);
+            const regionsInCountry = Object.keys(locs[value] || {});
+            const citiesInCountry = regionsInCountry.flatMap(region => locs[value][region] || []);
             if (isChecked) {
                 nextCountries.add(value);
                 regionsInCountry.forEach(region => nextRegions.add(region));
@@ -387,7 +427,7 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
         } else if (type === 'region') {
             const country = context?.country;
             if (!country) return;
-            const citiesInRegion = locations[country]?.[value] || [];
+            const citiesInRegion = locs[country]?.[value] || [];
     
             if (isChecked) {
                 nextRegions.add(value);
@@ -397,7 +437,7 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
                 citiesInRegion.forEach(city => nextCities.delete(city));
             }
     
-            const allRegionsInCountry = Object.keys(locations[country] || {});
+            const allRegionsInCountry = Object.keys(locs[country] || {});
             if (allRegionsInCountry.every(r => nextRegions.has(r))) {
                 nextCountries.add(country);
             } else {
@@ -407,7 +447,16 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
         } else if (type === 'city') {
             const region = context?.region;
             const country = context?.country;
-            if (!region || !country) return;
+            if (!region || !country) {
+                console.error('Missing region or country context for city selection:', { region, country, city: value });
+                return;
+            }
+    
+            // Ensure the location exists in the locations data
+            if (!locs[country] || !locs[country][region] || !locs[country][region].includes(value)) {
+                console.error('City not found in locations data:', { country, region, city: value, availableCountries: Object.keys(locs), availableRegions: locs[country] ? Object.keys(locs[country]) : [] });
+                return;
+            }
     
             if (isChecked) {
                 nextCities.add(value);
@@ -415,14 +464,14 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
                 nextCities.delete(value);
             }
             
-            const allCitiesInRegion = locations[country][region] || [];
+            const allCitiesInRegion = locs[country][region] || [];
             if (allCitiesInRegion.every(c => nextCities.has(c))) {
                 nextRegions.add(region);
             } else {
                 nextRegions.delete(region);
             }
     
-            const allRegionsInCountry = Object.keys(locations[country] || {});
+            const allRegionsInCountry = Object.keys(locs[country] || {});
             if (allRegionsInCountry.every(r => nextRegions.has(r))) {
                 nextCountries.add(country);
             } else {
@@ -444,16 +493,18 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
     };
 
     const handleRemoveRegion = (regionToRemove: string) => {
-        const parentCountry = Object.keys(locations).find(c => locations[c][regionToRemove]);
+        const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
+        const parentCountry = Object.keys(locs).find(c => locs[c] && locs[c][regionToRemove]);
         if (parentCountry) {
             handleLocationChange('region', regionToRemove, false, { country: parentCountry });
         }
     };
 
     const handleRemoveCity = (cityToRemove: string) => {
-        for (const country of Object.keys(locations)) {
-            for (const region of Object.keys(locations[country])) {
-                if (locations[country][region].includes(cityToRemove)) {
+        const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
+        for (const country of Object.keys(locs)) {
+            for (const region of Object.keys(locs[country] || {})) {
+                if (locs[country][region].includes(cityToRemove)) {
                     handleLocationChange('city', cityToRemove, false, { country, region });
                     return; // Found and handled
                 }
@@ -641,14 +692,41 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
                         <div className="p-3 border rounded-md">
                             <div className="flex justify-between items-center pb-2 mb-2">
                                 <p className="block text-sm font-medium text-gray-700">Локация (необязательно)</p>
-                                <input
-                                    type="text"
-                                    placeholder="Поиск..."
-                                    value={locationSearch}
-                                    onChange={e => setLocationSearch(e.target.value)}
-                                    className="w-48 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-brand-secondary focus:border-brand-secondary"
-                                    onClick={e => e.stopPropagation()}
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="Введите город для автодополнения..."
+                                        value={locationSearch}
+                                        onChange={e => {
+                                            setLocationSearch(e.target.value);
+                                            setShowLocationSuggestions(true);
+                                        }}
+                                        onFocus={() => setShowLocationSuggestions(true)}
+                                        onBlur={() => setTimeout(() => setShowLocationSuggestions(false), 200)}
+                                        className="w-64 px-2 py-1 border border-gray-300 rounded-md text-sm focus:ring-brand-secondary focus:border-brand-secondary"
+                                        onClick={e => e.stopPropagation()}
+                                    />
+                                    {showLocationSuggestions && locationSearch.trim() && (
+                                        <ul className="absolute z-50 w-full bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1 top-full left-0">
+                                            {locationSuggestions.length > 0 ? (
+                                                locationSuggestions.map((loc, i) => (
+                                                    <li 
+                                                        key={`${loc.city}-${i}`} 
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault();
+                                                            handleLocationSuggestionClick(loc);
+                                                        }}
+                                                        className="cursor-pointer p-2 hover:bg-gray-100 text-sm"
+                                                    >
+                                                        {loc.city}, {loc.region}, {loc.country}
+                                                    </li>
+                                                ))
+                                            ) : (
+                                                <li className="p-2 text-sm text-gray-500">Ничего не найдено</li>
+                                            )}
+                                        </ul>
+                                    )}
+                                </div>
                             </div>
                             <div className="mt-2">
                                 <label className="flex items-center pb-2 border-b mb-2"><input type="checkbox" checked={selectAllLocations} onChange={e => handleSelectAllLocations(e.target.checked)} className="h-4 w-4 text-brand-primary border-gray-300 rounded" /> <span className="ml-2 font-semibold text-gray-700 text-sm">Все локации</span></label>
@@ -656,8 +734,9 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
                                     <>
                                         <div className="max-h-48 overflow-y-auto text-sm space-y-1 mt-2">
                                             {Object.entries(filteredLocations).map(([country, regionsData]) => {
+                                                const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
                                                 const regionsInCountry = Object.keys(regionsData || {});
-                                                const citiesInCountry = regionsInCountry.flatMap(region => locations[country]?.[region] || []);
+                                                const citiesInCountry = regionsInCountry.flatMap(region => locs[country]?.[region] || []);
                                                 const checkedCitiesInCountry = citiesInCountry.filter(c => targetCities.includes(c));
                                                 const checkedRegionsInCountry = regionsInCountry.filter(r => targetRegions.includes(r));
                                                 const countryIsIndeterminate = !targetCountries.includes(country) && (checkedRegionsInCountry.length > 0 || checkedCitiesInCountry.length > 0);

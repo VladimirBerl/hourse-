@@ -300,7 +300,15 @@ const PollComponent: React.FC<{ item: Announcement, users: User[] }> = ({ item, 
     const { submitVote, updateAnnouncement } = data;
     const { poll } = item;
     
-    const userVote = poll.votes.find(v => v.userId === currentUser.id);
+    const rawUserVote = poll.votes.find(v => v.userId === currentUser.id);
+    const userVote = rawUserVote ? {
+        ...rawUserVote,
+        optionIds: Array.isArray(rawUserVote.optionIds) 
+            ? rawUserVote.optionIds 
+            : (typeof rawUserVote.optionIds === 'string' 
+                ? (() => { try { return JSON.parse(rawUserVote.optionIds); } catch { return []; } })() 
+                : [])
+    } : undefined;
     const isPollClosed = poll.pollEndsAt ? new Date() > new Date(poll.pollEndsAt) : false;
     const isAdmin = currentUser.role === UserRole.Admin;
 
@@ -329,16 +337,57 @@ const PollComponent: React.FC<{ item: Announcement, users: User[] }> = ({ item, 
     };
     
     const getVotersForOption = (optionId: string): User[] => {
-        const voterIds = poll.votes
-            .filter(v => v.optionIds.includes(optionId))
+        const normalizedVotes = poll.votes.map(vote => {
+            let optionIds = vote.optionIds;
+            if (!Array.isArray(optionIds)) {
+                if (typeof optionIds === 'string') {
+                    try {
+                        optionIds = JSON.parse(optionIds);
+                    } catch (e) {
+                        console.error('Error parsing optionIds:', e);
+                        optionIds = [];
+                    }
+                } else {
+                    optionIds = [];
+                }
+            }
+            return {
+                ...vote,
+                optionIds
+            };
+        });
+        const voterIds = normalizedVotes
+            .filter(v => Array.isArray(v.optionIds) && v.optionIds.includes(optionId))
             .map(v => v.userId);
         return users.filter(u => voterIds.includes(u.id));
     };
 
     const pollResults = useMemo(() => {
-        const totalVotesCast = poll.votes.reduce((total, vote) => total + vote.optionIds.length, 0);
+        // Normalize optionIds to ensure they are arrays
+        const normalizedVotes = poll.votes.map(vote => {
+            let optionIds = vote.optionIds;
+            if (!Array.isArray(optionIds)) {
+                if (typeof optionIds === 'string') {
+                    try {
+                        optionIds = JSON.parse(optionIds);
+                    } catch (e) {
+                        console.error('Error parsing optionIds:', e);
+                        optionIds = [];
+                    }
+                } else {
+                    optionIds = [];
+                }
+            }
+            return {
+                ...vote,
+                optionIds
+            };
+        });
+        
+        const totalVotesCast = normalizedVotes.reduce((total, vote) => total + (vote.optionIds?.length || 0), 0);
         return poll.options.map(option => {
-            const voteCount = poll.votes.filter(v => v.optionIds.includes(option.id)).length;
+            // Count votes where this option is selected
+            const voteCount = normalizedVotes.filter(v => Array.isArray(v.optionIds) && v.optionIds.includes(option.id)).length;
             return {
                 option,
                 voteCount,
@@ -954,7 +1003,7 @@ const AnnouncementsPage: React.FC = () => {
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold text-brand-accent">{displayPrice.toFixed(0)} руб.</span>
+                                                        <span className="font-bold text-brand-accent">{displayPrice?.toFixed(0)} руб.</span>
                                                         <button 
                                                             type="button" 
                                                             onClick={(e) => { e.stopPropagation(); handleEditPrice(ann, displayPrice); }}

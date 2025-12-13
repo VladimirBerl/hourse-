@@ -9,6 +9,7 @@ import TrainingDetailsModal from '../components/TrainingDetailsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import AnimatedStar from '../components/AnimatedStar';
 import StaticStar from '../components/StaticStar';
+import * as api from '../services/api';
 
 interface BonusHistoryModalProps {
     isOpen: boolean;
@@ -759,18 +760,24 @@ export const DashboardPage: React.FC = () => {
             return { success: false, message: 'Вы уже отправили запрос этому тренеру.' };
         }
     
-        const updatedUsers = users.map(u => {
-            if (u.id === trainerId) {
-                if (user.role === UserRole.Trainer) {
-                    return { ...u, trainerRequests: [...(u.trainerRequests || []), user.id] };
-                } else { // Student
-                    return { ...u, studentRequests: [...(u.studentRequests || []), user.id] };
-                }
+        try {
+            const token = sessionStorage.getItem('authToken');
+            if (!token) {
+                return { success: false, message: 'Необходима авторизация.' };
             }
-            return u;
-        });
-        await updateUsers(updatedUsers);
-        return { success: true, message: 'Запрос успешно отправлен.' };
+            
+            const result = await api.apiSendLinkRequest(trainerId, token);
+            if (result.success) {
+                // Refresh users list to get updated request status
+                const freshUsers = await api.apiGetAllUsers();
+                await updateUsers(freshUsers);
+                return { success: true, message: 'Запрос успешно отправлен.' };
+            }
+            return { success: false, message: result.message || 'Ошибка при отправке запроса.' };
+        } catch (error: any) {
+            console.error('Error sending link request:', error);
+            return { success: false, message: error.message || 'Ошибка при отправке запроса.' };
+        }
     };
     
     const confirmUnlinkTrainer = async () => {
@@ -869,39 +876,45 @@ export const DashboardPage: React.FC = () => {
 
         const handleStudentRequestResponse = async (accept: boolean) => {
              if (!pendingTrainer) return;
-             const updatedUsers = users.map(u => {
-                if (u.id === user.id) {
-                    return { ...u, linkedUsers: accept ? [...u.linkedUsers, pendingTrainer.id] : u.linkedUsers, pendingTrainerRequestFrom: null };
+             
+             try {
+                const token = sessionStorage.getItem('authToken');
+                if (!token) {
+                    console.error('No auth token');
+                    return;
                 }
-                if (u.id === pendingTrainer.id) {
-                    return { ...u, linkedUsers: accept ? [...u.linkedUsers, user.id] : u.linkedUsers, pendingStudents: u.pendingStudents?.filter(id => id !== user.id) };
+                
+                const result = await api.apiRespondToLinkRequest(pendingTrainer.id, accept, token);
+                if (result.success) {
+                    // Refresh users list to get updated state
+                    const freshUsers = await api.apiGetAllUsers();
+                    await updateUsers(freshUsers);
                 }
-                return u;
-            });
-            await updateUsers(updatedUsers);
+             } catch (error: any) {
+                console.error('Error responding to link request:', error);
+             }
         };
 
         const handleTrainerRequestResponse = async (requesterId: string, accept: boolean) => {
             const requester = users.find(u => u.id === requesterId);
             if (!requester) return;
     
-            const updatedUsers = users.map(u => {
-                if (u.id === user.id) {
-                    return {
-                        ...u,
-                        trainerRequests: u.trainerRequests?.filter(id => id !== requesterId),
-                        linkedUsers: accept ? [...u.linkedUsers, requesterId] : u.linkedUsers,
-                    };
+            try {
+                const token = sessionStorage.getItem('authToken');
+                if (!token) {
+                    console.error('No auth token');
+                    return;
                 }
-                if (u.id === requesterId) {
-                    return {
-                        ...u,
-                        linkedUsers: accept ? [...u.linkedUsers, user.id] : u.linkedUsers,
-                    };
+                
+                const result = await api.apiRespondToLinkRequest(requesterId, accept, token);
+                if (result.success) {
+                    // Refresh users list to get updated state
+                    const freshUsers = await api.apiGetAllUsers();
+                    await updateUsers(freshUsers);
                 }
-                return u;
-            });
-            await updateUsers(updatedUsers);
+             } catch (error: any) {
+                console.error('Error responding to link request:', error);
+             }
         };
 
 

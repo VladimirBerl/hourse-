@@ -188,8 +188,7 @@ const WelcomePage: React.FC = () => {
     ctaButtonText: 'Зарегистрироваться',
   };
 
-  // const content = data?.welcomePageContent || defaultContent;
-  const content = defaultContent;
+  const content = data?.welcomePageContent || defaultContent;
 
   const iconStyle = 'h-8 w-8 text-brand-secondary';
 
@@ -315,7 +314,7 @@ const WelcomePage: React.FC = () => {
               <p className="text-gray-500 max-w-2xl mx-auto">{content.featuresSubtitle}</p>
             </AnimatedSection>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {content.features.map((feature, index) => (
+              {content.features?.map((feature, index) => (
                 <FeatureCard key={feature.title} icon={featureIcons[index]} {...feature} />
               ))}
             </div>
@@ -333,7 +332,7 @@ const WelcomePage: React.FC = () => {
                   <h3 className="text-3xl font-bold text-brand-primary mb-4">{content.forTrainersTitle}</h3>
                   <p className="text-gray-600 mb-6">{content.forTrainersSubtitle}</p>
                   <ul className="space-y-3 text-gray-700">
-                    {content.forTrainersList.map((item) => (
+                    {content.forTrainersList?.map((item) => (
                       <li key={item} className="flex items-start">
                         <CheckIcon /> <span>{item}</span>
                       </li>
@@ -353,7 +352,7 @@ const WelcomePage: React.FC = () => {
                   <h3 className="text-3xl font-bold text-brand-primary mb-4">{content.forStudentsTitle}</h3>
                   <p className="text-gray-600 mb-6">{content.forStudentsSubtitle}</p>
                   <ul className="space-y-3 text-gray-700">
-                    {content.forStudentsList.map((item) => (
+                    {content.forStudentsList?.map((item) => (
                       <li key={item} className="flex items-start">
                         <CheckIcon /> <span>{item}</span>
                       </li>
@@ -378,7 +377,7 @@ const WelcomePage: React.FC = () => {
               <h2 className="text-3xl md:text-4xl font-bold text-white">{content.testimonialsTitle}</h2>
             </AnimatedSection>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {content.testimonials.map((testimonial) => (
+              {content.testimonials?.map((testimonial) => (
                 <TestimonialCard key={testimonial.id} {...testimonial} />
               ))}
             </div>
