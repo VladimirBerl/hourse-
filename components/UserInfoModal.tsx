@@ -1,6 +1,6 @@
 import React, { useContext, useMemo } from 'react';
 import { AuthContext, DataContext } from '../App';
-import { User, UserRole, TrainingSession, SubscriptionTier } from '../types';
+import { User, UserRole, TrainingSession, SubscriptionTier, getRoleDisplayName } from '../types';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import AnimatedStar from './AnimatedStar';
 import StaticStar from './StaticStar';
@@ -102,7 +102,7 @@ const UserInfoModal: React.FC<UserInfoModalProps> = ({ user, isOpen, onClose, on
                     <div className="flex-grow">
                         <h2 className="text-xl font-bold text-gray-800">{user.name} {user.surname}</h2>
                         <p className="text-sm text-gray-500">
-                            {user.role} &middot; {user.city} &middot; Рег: {new Date(user.registrationDate).toLocaleDateString('ru-RU')}
+                            {getRoleDisplayName(user.role)} &middot; {user.city} &middot; Рег: {new Date(user.registrationDate).toLocaleDateString('ru-RU')}
                         </p>
                     </div>
                     <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 text-3xl">&times;</button>
@@ -125,7 +125,7 @@ const UserInfoModal: React.FC<UserInfoModalProps> = ({ user, isOpen, onClose, on
                                     </div>
                                     <p className="text-2xl font-bold text-gray-800">{user.subscription?.tier || 'Нет'}</p>
                                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mt-1">Подписка</p>
-                                    <p className="text-xs text-gray-500 mt-1">{user.subscription?.expiresAt ? `до ${new Date(user.subscription.expiresAt).toLocaleDateString('ru-RU')}` : 'Бессрочно'}</p>
+                                    <p className="text-xs text-gray-500 mt-1">{user.subscription?.tier === SubscriptionTier.Base ? 'Бессрочно' : (user.subscription?.expiresAt ? `до ${new Date(user.subscription.expiresAt).toLocaleDateString('ru-RU')}` : 'Бессрочно')}</p>
                                 </div>
                             </div>
 

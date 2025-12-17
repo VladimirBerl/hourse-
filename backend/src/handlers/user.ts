@@ -26,7 +26,7 @@ export const register = async (req: any, res: any) => {
   try {
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ message: 'Пользователь с таким email уже существует.' });
+      return res.status(400).json({ message: 'User with this email already exists.' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -38,6 +38,23 @@ export const register = async (req: any, res: any) => {
       if (referrer) {
         await referrer.increment('referralCount');
       }
+    }
+
+    // Get trial subscription settings
+    const settings = await AppSettings.findByPk('default');
+    const trialSettings = (settings as any)?.trialSettings;
+    
+    // Apply trial subscription if configured and user is not Admin or Spectator
+    let subscription = undefined;
+    if (trialSettings && trialSettings.tier && trialSettings.durationDays && role !== 'Admin' && role !== 'Spectator') {
+      const registrationDate = new Date();
+      const expiresAt = new Date(registrationDate);
+      expiresAt.setDate(expiresAt.getDate() + trialSettings.durationDays);
+      
+      subscription = {
+        tier: trialSettings.tier,
+        expiresAt: expiresAt.toISOString(),
+      };
     }
 
     const newUser = await User.create({
@@ -53,6 +70,7 @@ export const register = async (req: any, res: any) => {
       referredBy,
       notificationSettings: notificationSettings ?? {},
       permissions: permissions ?? {},
+      subscription: subscription,
     });
 
     const userForClient = transformUserForClient(newUser);

@@ -2,7 +2,7 @@ import React, { useState, useContext, PropsWithChildren } from 'react';
 // FIX: Updated react-router-dom imports for v5, removing Outlet.
 import { NavLink, useLocation } from 'react-router-dom';
 import { AuthContext } from '../App';
-import { User, UserRole, AdminPermissions } from '../types';
+import { User, UserRole, AdminPermissions, SubscriptionTier } from '../types';
 
 const iconStyle = "h-6 w-6 mr-3";
 
@@ -138,7 +138,14 @@ const Layout: React.FC<PropsWithChildren> = ({ children }) => {
     } else if (auth.user.role === UserRole.Trainer) {
         finalNavItems.splice(3, 0, ...trainerExtraItems);
     }
-    // For Student, no changes are needed to the base userNavItems
+    
+    // Hide Statistics and Library for users with Base subscription
+    const userSubscription = auth.user.subscription?.tier;
+    if (userSubscription === SubscriptionTier.Base || !userSubscription) {
+        finalNavItems = finalNavItems.filter(item => 
+            !['/skills', '/library'].includes(item.to)
+        );
+    }
     
     return finalNavItems;
   }, [auth?.user]);

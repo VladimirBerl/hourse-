@@ -28,6 +28,7 @@ import {
   User,
   UserRole,
   TrainingSession,
+  SubscriptionTier,
   Skill,
   Announcement,
   NewsItem,
@@ -371,6 +372,59 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleOnline);
     };
   }, [currentUser, token]);
+
+  // Auto-refresh chat data
+  useEffect(() => {
+    if (!currentUser || !token) return;
+
+    const refreshChatData = async () => {
+      try {
+        const [freshConversations, freshChatMessages] = await Promise.all([
+          api.apiGetConversations(currentUser.id),
+          api.apiGetAllChatMessages(),
+        ]);
+        setConversations(freshConversations);
+        setChatMessages(freshChatMessages);
+      } catch (err) {
+        console.warn('Chat data refresh failed (likely offline).', err);
+      }
+    };
+
+    // Check if user is on chat page
+    const isInChat = () => {
+      const hash = window.location.hash;
+      return hash === '#/chat' || hash.startsWith('#/chat/');
+    };
+
+    // Initial refresh
+    refreshChatData();
+
+    let lastRefreshTime = Date.now();
+    const checkAndRefresh = () => {
+      const inChat = isInChat();
+      const now = Date.now();
+      const timeSinceLastRefresh = now - lastRefreshTime;
+
+      if (inChat) {
+        // In chat: refresh every 5 seconds
+        if (timeSinceLastRefresh >= 5000) {
+          refreshChatData();
+          lastRefreshTime = now;
+        }
+      } else {
+        // Not in chat: refresh every 1 minute
+        if (timeSinceLastRefresh >= 60000) {
+          refreshChatData();
+          lastRefreshTime = now;
+        }
+      }
+    };
+
+    // Check every second to handle location changes
+    const chatTimer = setInterval(checkAndRefresh, 1000);
+
+    return () => clearInterval(chatTimer);
+  }, [currentUser?.id, token]);
 
   const fetchAllData = async (user: User) => {
     setIsLoading(true);
@@ -1415,12 +1469,45 @@ const App: React.FC = () => {
       (currentUser?.role === UserRole.Trainer && (currentUser.trainerRequests?.length ?? 0) > 0);
     const hasMyStudentsRequest =
       currentUser?.role === UserRole.Trainer && (currentUser.studentRequests?.length ?? 0) > 0;
-    const hasTrainingRequest =
-      !!currentUser &&
-      trainings.some(
-        (t) =>
-          t.status === 'scheduled' && t.participants.some((p) => p.userId === currentUser.id && !p.confirmed)
-      );
+    // Check for training notifications: unconfirmed future trainings and unrated past trainings
+    const hasTrainingRequest = (() => {
+      if (!currentUser) return false;
+      
+      const now = new Date();
+      
+      // Helper to get training datetime
+      const getTrainingDateTime = (t: TrainingSession) => {
+        const datePart = t.date.split('T')[0];
+        return new Date(`${datePart}T${t.startTime}`);
+      };
+      
+      // Check for unconfirmed future trainings
+      const hasUnconfirmedFuture = trainings.some((t) => {
+        const trainingDateTime = getTrainingDateTime(t);
+        return trainingDateTime >= now && 
+               t.status !== 'cancelled' &&
+               t.participants.some((p) => p.userId === currentUser.id && !p.confirmed);
+      });
+      
+      // Check for unrated past trainings
+      const hasUnratedPast = trainings.some((t) => {
+        const trainingDateTime = getTrainingDateTime(t);
+        if (trainingDateTime >= now || t.status === 'cancelled') return false;
+        
+        const userRating = t.ratings?.find(r => r.userId === currentUser.id);
+        if (userRating) return false; // Already rated
+        
+        const isParticipant = t.participants.some(p => p.userId === currentUser.id);
+        if (!isParticipant) return false; // Not a participant
+        
+        const isSoloTraining = t.participants.length === 1;
+        const isFullyConfirmed = t.participants.every(p => p.confirmed);
+        
+        return isSoloTraining || isFullyConfirmed;
+      });
+      
+      return hasUnconfirmedFuture || hasUnratedPast;
+    })();
 
     const now = new Date();
 
@@ -1477,7 +1564,7 @@ const App: React.FC = () => {
 
     const hasUnreadMessages =
       currentUser?.role === UserRole.Admin && perms.canViewMessages
-        ? developerMessages.some((m) => !m.isRead)
+        ? developerMessages.some((m) => !m.isRead && m.status !== 'closed')
         : false;
 
     const hasUnreadChatMessages =
@@ -1858,8 +1945,16 @@ const App: React.FC = () => {
                     <>
                       <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/calendar" element={<CalendarPage />} />
-                      <Route path="/skills" element={<SkillsPage />} />
-                      <Route path="/library" element={<LibraryPage />} />
+                      <Route path="/skills" element={
+                        currentUser.subscription?.tier === SubscriptionTier.Base || !currentUser.subscription?.tier 
+                          ? <Navigate to="/dashboard" replace /> 
+                          : <SkillsPage />
+                      } />
+                      <Route path="/library" element={
+                        currentUser.subscription?.tier === SubscriptionTier.Base || !currentUser.subscription?.tier 
+                          ? <Navigate to="/dashboard" replace /> 
+                          : <LibraryPage />
+                      } />
                       <Route path="/announcements" element={<AnnouncementsPage />} />
                       <Route path="/news" element={<NewsPage />} />
                       <Route path="/chat" element={<ChatPage />} />

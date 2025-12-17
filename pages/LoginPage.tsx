@@ -167,29 +167,29 @@ const LoginPage: React.FC = () => {
   }, [location.search]);
 
   const flatLocations = useMemo(() => {
-    const locations = data?.locations || LOCATION_DATA;
-    if (!locations || Object.keys(locations).length === 0) {
-      return Object.entries(LOCATION_DATA).flatMap(([country, regions]) => 
-        Object.entries(regions).flatMap(([region, cities]) => 
-          cities.map(city => ({ city, region, country }))
-        )
-      );
+    // Используем LOCATION_DATA как fallback, если data?.locations пустой или не определен
+    const locations = (data?.locations && Object.keys(data.locations).length > 0) ? data.locations : LOCATION_DATA;
+    if (!locations || typeof locations !== 'object' || Object.keys(locations).length === 0) {
+      return [];
     }
-    return Object.entries(locations).flatMap(([country, regions]) => 
-        Object.entries(regions).flatMap(([region, cities]) => 
-            cities.map(city => ({ city, region, country }))
-        )
-    );
+    try {
+      return Object.entries(locations).flatMap(([country, regions]) => {
+        if (!regions || typeof regions !== 'object') return [];
+        return Object.entries(regions).flatMap(([region, cities]) => {
+          if (!Array.isArray(cities)) return [];
+          return cities.map(city => ({ city, region, country }));
+        });
+      });
+    } catch (error) {
+      console.error('Error creating flatLocations:', error);
+      return [];
+    }
   }, [data?.locations]);
 
   const suggestions = useMemo(() => {
       if (!cityInput) return [];
-      const search = cityInput.toLowerCase().trim();
-      if (!search) return [];
-      return flatLocations.filter(loc => {
-          const cityLower = loc.city.toLowerCase();
-          return cityLower.includes(search);
-      }).slice(0, 10);
+      const search = cityInput.toLowerCase();
+      return flatLocations.filter(loc => loc.city.toLowerCase().startsWith(search)).slice(0, 10);
   }, [cityInput, flatLocations]);
 
   const handleCityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,8 +244,10 @@ const LoginPage: React.FC = () => {
     }
     if (!auth) return;
 
-    // Убрана клиентская проверка - сервер является единственным источником правды
-    // Проверка на дубликаты email будет выполнена на сервере
+    if (auth.users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+        setError('Пользователь с таким email уже существует.');
+        return;
+    }
 
     setIsLoading(true);
     const newUserPartial = { name, surname, country, region, city, email, password, role: isSpectator ? UserRole.Spectator : role, referredBy: referredBy || undefined };
@@ -256,9 +258,7 @@ const LoginPage: React.FC = () => {
           setError('Ошибка регистрации. Возможно, email уже занят.');
         }
     } catch (err: any) {
-        // Обрабатываем ошибку от сервера
-        const errorMessage = err.message || err.response?.data?.message || 'Произошла ошибка регистрации.';
-        setError(errorMessage);
+        setError(err.message || 'Произошла ошибка регистрации.');
     } finally {
         setIsLoading(false);
     }

@@ -187,6 +187,21 @@ export enum UserRole {
   Spectator = 'Spectator',
 }
 
+export function getRoleDisplayName(role: UserRole): string {
+  switch (role) {
+    case UserRole.Student:
+      return 'Ученик';
+    case UserRole.Trainer:
+      return 'Тренер';
+    case UserRole.Admin:
+      return 'Администратор';
+    case UserRole.Spectator:
+      return 'Зритель';
+    default:
+      return role;
+  }
+}
+
 export enum SubscriptionTier {
   Base = 'Базовая',
   Pro = 'Про',
@@ -326,6 +341,7 @@ export interface TrainingSession {
   startTime: string; // "HH:MM"
   duration: number; // in minutes
   authorId: string;
+  createdAt: string;
   participants: { userId: string; confirmed: boolean; role: UserRole }[];
   type?: string;
   comments?: string;

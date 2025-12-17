@@ -3,13 +3,12 @@
 import React, { useContext, useState, useRef, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext, DataContext } from '../App';
-import { TrainingSession, User, UserRole, BonusTransaction, SubscriptionTier, AppSettings } from '../types';
+import { TrainingSession, User, UserRole, BonusTransaction, SubscriptionTier, AppSettings, getRoleDisplayName, LOCATION_DATA } from '../types';
 import TrainingCalendar from '../components/TrainingCalendar';
 import TrainingDetailsModal from '../components/TrainingDetailsModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import AnimatedStar from '../components/AnimatedStar';
 import StaticStar from '../components/StaticStar';
-import * as api from '../services/api';
 
 interface BonusHistoryModalProps {
     isOpen: boolean;
@@ -90,9 +89,12 @@ const EditProfileModal: React.FC<{
     const [formData, setFormData] = useState({ name: user.name, surname: user.surname, country: user.country, region: user.region, city: user.city });
     const [selectedRole, setSelectedRole] = useState<UserRole.Student | UserRole.Trainer>(UserRole.Student);
     
-    const countries = Object.keys(data?.locations || {});
-    const regions = formData.country ? Object.keys(data?.locations[formData.country] || {}) : [];
-    const cities = formData.country && formData.region ? (data?.locations[formData.country]?.[formData.region] || []) : [];
+    // Используем LOCATION_DATA как fallback, если data?.locations пустой или не определен
+    const locations = (data?.locations && Object.keys(data.locations).length > 0) ? data.locations : LOCATION_DATA;
+    
+    const countries = Object.keys(locations);
+    const regions = formData.country ? Object.keys(locations[formData.country] || {}) : [];
+    const cities = formData.country && formData.region ? (locations[formData.country]?.[formData.region] || []) : [];
     
     useEffect(() => { 
         if (isOpen) { 
@@ -165,7 +167,7 @@ const EditProfileModal: React.FC<{
                                             selectedRole === UserRole.Student ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-300 hover:border-brand-secondary'
                                         }`}
                                     >
-                                        {UserRole.Student}
+                                        {getRoleDisplayName(UserRole.Student)}
                                     </button>
                                     <button
                                         type="button"
@@ -174,7 +176,7 @@ const EditProfileModal: React.FC<{
                                             selectedRole === UserRole.Trainer ? 'bg-brand-primary text-white border-brand-primary' : 'bg-white text-gray-700 border-gray-300 hover:border-brand-secondary'
                                         }`}
                                     >
-                                        {UserRole.Trainer}
+                                        {getRoleDisplayName(UserRole.Trainer)}
                                     </button>
                                 </div>
                             </div>
@@ -760,24 +762,18 @@ export const DashboardPage: React.FC = () => {
             return { success: false, message: 'Вы уже отправили запрос этому тренеру.' };
         }
     
-        try {
-            const token = sessionStorage.getItem('authToken');
-            if (!token) {
-                return { success: false, message: 'Необходима авторизация.' };
+        const updatedUsers = users.map(u => {
+            if (u.id === trainerId) {
+                if (user.role === UserRole.Trainer) {
+                    return { ...u, trainerRequests: [...(u.trainerRequests || []), user.id] };
+                } else { // Student
+                    return { ...u, studentRequests: [...(u.studentRequests || []), user.id] };
+                }
             }
-            
-            const result = await api.apiSendLinkRequest(trainerId, token);
-            if (result.success) {
-                // Refresh users list to get updated request status
-                const freshUsers = await api.apiGetAllUsers();
-                await updateUsers(freshUsers);
-                return { success: true, message: 'Запрос успешно отправлен.' };
-            }
-            return { success: false, message: result.message || 'Ошибка при отправке запроса.' };
-        } catch (error: any) {
-            console.error('Error sending link request:', error);
-            return { success: false, message: error.message || 'Ошибка при отправке запроса.' };
-        }
+            return u;
+        });
+        await updateUsers(updatedUsers);
+        return { success: true, message: 'Запрос успешно отправлен.' };
     };
     
     const confirmUnlinkTrainer = async () => {
@@ -814,17 +810,21 @@ export const DashboardPage: React.FC = () => {
                     </div>
                 </div>
                 <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/*" aria-label="Upload new avatar" />
-                <h1 className="text-2xl font-bold text-gray-800 mt-4 flex items-center justify-center gap-2">
-                    {user.name} {user.surname}
-                    {user.subscription?.tier === SubscriptionTier.Maximum && <AnimatedStar />}
-                    {user.subscription?.tier === SubscriptionTier.Pro && <StaticStar color="silver" />}
+                <h1 className="text-2xl font-bold text-gray-800 mt-4 flex items-center justify-center">
+                    <span className="inline-flex items-center gap-1">
+                        {user.name} {user.surname}
+                        {user.subscription?.tier === SubscriptionTier.Maximum && <AnimatedStar />}
+                        {user.subscription?.tier === SubscriptionTier.Pro && <StaticStar color="silver" />}
+                    </span>
                 </h1>
-                <p className="text-gray-600 mt-1">{user.role} &middot; {user.city}, {user.region}</p>
+                <p className="text-gray-600 mt-1">{getRoleDisplayName(user.role)} &middot; {user.city}, {user.region}</p>
                 {user.role !== UserRole.Admin && user.subscription && (
                     <div className="mt-2 text-sm text-gray-600 flex items-center justify-center">
-                        {user.subscription.tier === SubscriptionTier.Maximum && <AnimatedStar />}
-                        {user.subscription.tier === SubscriptionTier.Pro && <StaticStar color="silver" />}
-                        <span className={user.subscription.tier !== SubscriptionTier.Base ? "ml-1" : ""}>Статус подписки: <strong>{user.subscription.tier}</strong> {user.subscription.expiresAt ? `(до ${new Date(user.subscription.expiresAt).toLocaleDateString('ru-RU')})` : ''}</span>
+                        <span className="inline-flex items-center gap-1">
+                            {user.subscription.tier === SubscriptionTier.Maximum && <AnimatedStar />}
+                            {user.subscription.tier === SubscriptionTier.Pro && <StaticStar color="silver" />}
+                            Статус подписки: <strong>{user.subscription.tier}</strong> {user.subscription.tier !== SubscriptionTier.Base && user.subscription.expiresAt ? `(до ${new Date(user.subscription.expiresAt).toLocaleDateString('ru-RU')})` : ''}
+                        </span>
                     </div>
                 )}
                 <div className="mt-4 flex flex-col items-center justify-center space-y-3">
@@ -848,12 +848,15 @@ export const DashboardPage: React.FC = () => {
                 </div>
                 <div className="mt-4 space-y-2">
                     <p className="text-xs text-gray-400">Дата регистрации: {new Date(user.registrationDate).toLocaleDateString('ru-RU')}</p>
-                    <div className="bg-gray-100 px-2 py-1 inline-flex items-center rounded-lg space-x-2">
+                    <button 
+                        type="button" 
+                        onClick={() => copyToClipboard(user.id, 'ID')} 
+                        title="Копировать ID" 
+                        className="bg-gray-100 px-2 py-1 inline-flex items-center rounded-lg space-x-2 hover:bg-gray-200 transition-colors cursor-pointer"
+                    >
                         <p className="text-sm text-gray-600 font-mono">Ваш ID: {user.id}</p>
-                        <button type="button" onClick={() => copyToClipboard(user.id, 'ID')} title="Копировать ID" className="text-gray-500 hover:text-brand-primary p-1 rounded-full hover:bg-gray-200 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                        </button>
-                    </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 hover:text-brand-primary transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    </button>
                     {copySuccess && <p className="text-xs text-brand-accent mt-1">{copySuccess}</p>}
                     {inviteCopySuccess && <p className="text-xs text-indigo-600 mt-1">{inviteCopySuccess}</p>}
                     {avatarError && <p className="text-xs text-red-600 mt-1">{avatarError}</p>}
@@ -876,45 +879,39 @@ export const DashboardPage: React.FC = () => {
 
         const handleStudentRequestResponse = async (accept: boolean) => {
              if (!pendingTrainer) return;
-             
-             try {
-                const token = sessionStorage.getItem('authToken');
-                if (!token) {
-                    console.error('No auth token');
-                    return;
+             const updatedUsers = users.map(u => {
+                if (u.id === user.id) {
+                    return { ...u, linkedUsers: accept ? [...u.linkedUsers, pendingTrainer.id] : u.linkedUsers, pendingTrainerRequestFrom: null };
                 }
-                
-                const result = await api.apiRespondToLinkRequest(pendingTrainer.id, accept, token);
-                if (result.success) {
-                    // Refresh users list to get updated state
-                    const freshUsers = await api.apiGetAllUsers();
-                    await updateUsers(freshUsers);
+                if (u.id === pendingTrainer.id) {
+                    return { ...u, linkedUsers: accept ? [...u.linkedUsers, user.id] : u.linkedUsers, pendingStudents: u.pendingStudents?.filter(id => id !== user.id) };
                 }
-             } catch (error: any) {
-                console.error('Error responding to link request:', error);
-             }
+                return u;
+            });
+            await updateUsers(updatedUsers);
         };
 
         const handleTrainerRequestResponse = async (requesterId: string, accept: boolean) => {
             const requester = users.find(u => u.id === requesterId);
             if (!requester) return;
     
-            try {
-                const token = sessionStorage.getItem('authToken');
-                if (!token) {
-                    console.error('No auth token');
-                    return;
+            const updatedUsers = users.map(u => {
+                if (u.id === user.id) {
+                    return {
+                        ...u,
+                        trainerRequests: u.trainerRequests?.filter(id => id !== requesterId),
+                        linkedUsers: accept ? [...u.linkedUsers, requesterId] : u.linkedUsers,
+                    };
                 }
-                
-                const result = await api.apiRespondToLinkRequest(requesterId, accept, token);
-                if (result.success) {
-                    // Refresh users list to get updated state
-                    const freshUsers = await api.apiGetAllUsers();
-                    await updateUsers(freshUsers);
+                if (u.id === requesterId) {
+                    return {
+                        ...u,
+                        linkedUsers: accept ? [...u.linkedUsers, user.id] : u.linkedUsers,
+                    };
                 }
-             } catch (error: any) {
-                console.error('Error responding to link request:', error);
-             }
+                return u;
+            });
+            await updateUsers(updatedUsers);
         };
 
 

@@ -25,15 +25,7 @@ const PollComponent: React.FC<{ item: LibraryPost, users: User[] }> = ({ item, u
     const { submitVote, updateLibraryPost } = data;
     const { poll } = item;
     
-    const rawUserVote = poll.votes.find(v => v.userId === currentUser.id);
-    const userVote = rawUserVote ? {
-        ...rawUserVote,
-        optionIds: Array.isArray(rawUserVote.optionIds) 
-            ? rawUserVote.optionIds 
-            : (typeof rawUserVote.optionIds === 'string' 
-                ? (() => { try { return JSON.parse(rawUserVote.optionIds); } catch { return []; } })() 
-                : [])
-    } : undefined;
+    const userVote = poll.votes.find(v => v.userId === currentUser.id);
     const isPollClosed = poll.pollEndsAt ? new Date() > new Date(poll.pollEndsAt) : false;
     const isAdmin = currentUser.role === UserRole.Admin;
 
@@ -62,57 +54,16 @@ const PollComponent: React.FC<{ item: LibraryPost, users: User[] }> = ({ item, u
     };
     
     const getVotersForOption = (optionId: string): User[] => {
-        const normalizedVotes = poll.votes.map(vote => {
-            let optionIds = vote.optionIds;
-            if (!Array.isArray(optionIds)) {
-                if (typeof optionIds === 'string') {
-                    try {
-                        optionIds = JSON.parse(optionIds);
-                    } catch (e) {
-                        console.error('Error parsing optionIds:', e);
-                        optionIds = [];
-                    }
-                } else {
-                    optionIds = [];
-                }
-            }
-            return {
-                ...vote,
-                optionIds
-            };
-        });
-        const voterIds = normalizedVotes
-            .filter(v => Array.isArray(v.optionIds) && v.optionIds.includes(optionId))
+        const voterIds = poll.votes
+            .filter(v => v.optionIds.includes(optionId))
             .map(v => v.userId);
         return users.filter(u => voterIds.includes(u.id));
     };
 
     const pollResults = useMemo(() => {
-        // Normalize optionIds to ensure they are arrays
-        const normalizedVotes = poll.votes.map(vote => {
-            let optionIds = vote.optionIds;
-            if (!Array.isArray(optionIds)) {
-                if (typeof optionIds === 'string') {
-                    try {
-                        optionIds = JSON.parse(optionIds);
-                    } catch (e) {
-                        console.error('Error parsing optionIds:', e);
-                        optionIds = [];
-                    }
-                } else {
-                    optionIds = [];
-                }
-            }
-            return {
-                ...vote,
-                optionIds
-            };
-        });
-        
-        const totalVotesCast = normalizedVotes.reduce((total, vote) => total + (vote.optionIds?.length || 0), 0);
+        const totalVotesCast = poll.votes.reduce((total, vote) => total + vote.optionIds.length, 0);
         return poll.options.map(option => {
-            // Count votes where this option is selected
-            const voteCount = normalizedVotes.filter(v => Array.isArray(v.optionIds) && v.optionIds.includes(option.id)).length;
+            const voteCount = poll.votes.filter(v => v.optionIds.includes(option.id)).length;
             return {
                 option,
                 voteCount,
@@ -230,6 +181,33 @@ const LibraryPage: React.FC = () => {
     if (!auth?.user || !data) return <div>Загрузка...</div>;
     const { user, updateUserSilently, users } = auth;
     const { libraryPosts, addLibraryPost, updateLibraryPost, deleteLibraryPost, settings, updateSettings, locations } = data;
+
+    // Check subscription for non-admin users
+    if (user.role !== UserRole.Admin && (user.subscription?.tier === SubscriptionTier.Base || !user.subscription?.tier)) {
+        return (
+            <div className="relative h-[calc(100vh-10rem)]">
+                <div className="filter blur-lg pointer-events-none opacity-50">
+                    <div className="space-y-6">
+                        <div className="bg-white p-4 rounded-lg shadow-md h-40 animate-pulse"></div>
+                        <h2 className="text-2xl font-bold text-gray-400 pt-4">Библиотека</h2>
+                        <div className="bg-white p-6 rounded-lg shadow-md h-96 animate-pulse"></div>
+                    </div>
+                </div>
+                <div className="absolute inset-0 bg-white/30 flex flex-col items-center justify-center text-center p-4 rounded-lg">
+                    <div className="bg-white/80 backdrop-blur-sm p-8 rounded-xl shadow-lg">
+                        <h3 className="text-2xl font-bold text-gray-800 mb-4">Библиотека доступна на тарифах 'Про' и 'Максимум'.</h3>
+                        <p className="text-gray-600 mb-6">Обновите подписку, чтобы получить доступ к библиотеке знаний.</p>
+                        <button
+                            onClick={() => window.location.hash = '/dashboard'}
+                            className="bg-brand-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-brand-secondary transition"
+                        >
+                            Перейти к управлению подпиской
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const relevantLibraryPosts = useMemo(() => {
         const now = new Date();

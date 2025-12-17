@@ -2,7 +2,7 @@
 import React, { useContext, useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext, DataContext } from '../App';
-import { UserRole, User, TrainingSession, Announcement, DeletionInfo, BonusTransaction, SubscriptionTier, AppSettings } from '../types';
+import { UserRole, User, TrainingSession, Announcement, DeletionInfo, BonusTransaction, SubscriptionTier, AppSettings, getRoleDisplayName, LOCATION_DATA } from '../types';
 import {
     LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 // FIX: Import 'CartesianGrid' from 'recharts' to resolve 'Cannot find name' error.
@@ -516,9 +516,12 @@ const EditUserModal: React.FC<{ user: User | null; isOpen: boolean; onClose: () 
         }
     }, [user, isOpen]);
 
-    const countries = Object.keys(locations);
-    const regions = formData.country ? Object.keys(locations[formData.country] || {}) : [];
-    const cities = formData.country && formData.region ? (locations[formData.country]?.[formData.region] || []) : [];
+    // Используем LOCATION_DATA как fallback, если locations пустой или не определен
+    const effectiveLocations = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
+    
+    const countries = Object.keys(effectiveLocations);
+    const regions = formData.country ? Object.keys(effectiveLocations[formData.country] || {}) : [];
+    const cities = formData.country && formData.region ? (effectiveLocations[formData.country]?.[formData.region] || []) : [];
 
     if (!isOpen || !user) return null;
 
@@ -677,6 +680,7 @@ const CheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w
 const userColumnsConfig: Record<string, string> = {
     id: 'ID',
     city: 'Город',
+    region: 'Регион',
     role: 'Роль',
     subscription: 'Подписка',
     referralCount: 'Рефералы',
@@ -781,6 +785,7 @@ const UserSearchModal: React.FC<{
                                     {visibleColumns.includes('approvedAnnouncementCount') && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase text-center">Объявления</th>}
                                     {visibleColumns.includes('effectiveDiscount') && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase text-center">Скидка</th>}
                                     {visibleColumns.includes('city') && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Город</th>}
+                                    {visibleColumns.includes('region') && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Регион</th>}
                                     {visibleColumns.includes('registrationDate') && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Дата рег.</th>}
                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Действия</th>
                                 </tr>
@@ -806,7 +811,7 @@ const UserSearchModal: React.FC<{
                                                 </div>
                                             </td>
                                         )}
-                                        {visibleColumns.includes('role') && <td className="px-4 py-2 text-sm">{user.role}</td>}
+                                        {visibleColumns.includes('role') && <td className="px-4 py-2 text-sm">{getRoleDisplayName(user.role)}</td>}
                                         {visibleColumns.includes('referralCount') && (
                                             <td className="px-4 py-2 text-sm text-center">
                                                 {user.referralCount > 0 ? (
@@ -827,11 +832,12 @@ const UserSearchModal: React.FC<{
                                         {visibleColumns.includes('effectiveDiscount') && 
                                             <td className="px-4 py-2 text-sm text-center">
                                                 <button onClick={() => onEditDiscount(user as User)} className="hover:underline" title="Редактировать скидку">
-                                                    {user.effectiveDiscount}%
+                                                    {(user.effectiveDiscount !== undefined && user.effectiveDiscount !== null) ? `${user.effectiveDiscount}%` : '0%'}
                                                 </button>
                                             </td>
                                         }
                                         {visibleColumns.includes('city') && <td className="px-4 py-2 text-sm">{user.city}</td>}
+                                        {visibleColumns.includes('region') && <td className="px-4 py-2 text-sm">{user.region}</td>}
                                         {visibleColumns.includes('registrationDate') && <td className="px-4 py-2 text-sm">{new Date(user.registrationDate).toLocaleDateString('ru-RU')}</td>}
                                         <td className="px-4 py-2 text-sm">
                                             <UserActionButtons 
@@ -972,6 +978,8 @@ const BonusHistoryView: React.FC<{ setView: React.Dispatch<React.SetStateAction<
     }, [augmentedTransactions, period, customStartDate, customEndDate, countryFilter, regionFilter, cityFilter, sourceFilter, typeFilter, listSearch]);
 
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(filteredItems, { key: 'timestamp', direction: 'descending' });
+
+    
 
     const summary = useMemo(() => {
         const totalAccrued = sortedItems.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
@@ -1288,8 +1296,43 @@ const AdminDashboardPage: React.FC = () => {
         const periodStart2 = new Date(new Date().setDate(now.getDate() - 60));
         const calculateChange = (current: number, previous: number) => previous === 0 ? (current > 0 ? 100 : 0) : ((current - previous) / previous) * 100;
 
+        // Helper to get training end datetime
+        const getTrainingEndDateTime = (t: TrainingSession): Date => {
+            const startDateTime = getTrainingDateTime(t);
+            const endDateTime = new Date(startDateTime.getTime());
+            endDateTime.setMinutes(endDateTime.getMinutes() + (t.duration || 0));
+            return endDateTime;
+        };
+        
         const isCompletedAndPast = (t: TrainingSession) => {
-            return getTrainingDateTime(t) < now && t.participants.every(p => p.confirmed) && t.status !== 'cancelled';
+            // Training is completed if:
+            // 1. All participants confirmed
+            // 2. Not cancelled
+            // 3. Either: end time has passed OR createdAt + duration has passed
+            if (!t.participants.every(p => p.confirmed) || t.status === 'cancelled') {
+                return false;
+            }
+
+            if(t.participants.every(p => p.confirmed)) {
+                return true
+            }
+            
+            const trainingWithCreatedAt = t as TrainingSession & { createdAt?: string };
+            
+            // Primary check: if createdAt exists, use it as the main criterion
+            if (trainingWithCreatedAt.createdAt) {
+                const createdAtDate = new Date(trainingWithCreatedAt.createdAt);
+                const createdAtEnd = new Date(createdAtDate.getTime());
+                createdAtEnd.setMinutes(createdAtEnd.getMinutes() + (t.duration || 0));
+                // If createdAt + duration has passed, training is completed
+                if (createdAtEnd < now) {
+                    return true;
+                }
+            }
+            
+            // Fallback: check if training end time (date + startTime + duration) has passed
+            const endDateTime = getTrainingEndDateTime(t);
+            return endDateTime < now;
         };
 
         const completedTrainings = filteredData.trainings.filter(isCompletedAndPast);
@@ -1479,13 +1522,51 @@ const AdminDashboardPage: React.FC = () => {
             case 'all-users': title = showDeletedUsers ? 'Удаленные пользователи' : 'Все пользователи'; items = activeUsers; break;
             case 'trainers': title = showDeletedUsers ? 'Удаленные тренеры' : 'Тренеры'; items = activeUsers.filter(u => u.role === UserRole.Trainer); break;
             case 'students': title = showDeletedUsers ? 'Удаленные ученики' : 'Ученики'; items = activeUsers.filter(u => u.role === UserRole.Student); break;
-            case 'spectators': title = showDeletedUsers ? `Удаленные (${UserRole.Spectator})` : `Роль "${UserRole.Spectator}"`; items = activeUsers.filter(u => u.role === UserRole.Spectator); break;
+            case 'spectators': title = showDeletedUsers ? `Удаленные (${getRoleDisplayName(UserRole.Spectator)})` : `Роль "${getRoleDisplayName(UserRole.Spectator)}"`; items = activeUsers.filter(u => u.role === UserRole.Spectator); break;
             case 'trainings': {
                 const now = new Date();
-                now.setHours(0, 0, 0, 0);
+                
+                // Helper function to get training start datetime (same logic as getTrainingDateTime)
+                const getTrainingStartDateTime = (t: TrainingSession): Date => {
+                    const dateStr = t.date.split('T')[0]; // Get only date part, handle ISO strings
+                    return new Date(`${dateStr}T${t.startTime}`);
+                };
+                
+                // Helper function to get training end datetime
+                const getTrainingEndDateTime = (t: TrainingSession): Date => {
+                    const startDateTime = getTrainingStartDateTime(t);
+                    const endDateTime = new Date(startDateTime.getTime());
+                    endDateTime.setMinutes(endDateTime.getMinutes() + (t.duration || 0));
+                    return endDateTime;
+                };
 
-                const pastTrainings = filteredData.trainings.filter(t => new Date(t.date) < now);
-                const futureTrainings = filteredData.trainings.filter(t => new Date(t.date) >= now);
+                // Filter out cancelled trainings from future trainings
+                // Past trainings can include cancelled ones for historical record
+                const pastTrainings = filteredData.trainings.filter(t => {
+                    if (t.status === 'cancelled') {
+                        // Cancelled trainings go to past if their date has passed
+                        const trainingDate = new Date(t.date.split('T')[0]);
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        return trainingDate < today;
+                    }
+                    const createdDate = new Date(t.createdAt)
+                    
+                    return createdDate < now;
+                });
+                
+                const futureTrainings = filteredData.trainings.filter(t => {
+                    // Exclude cancelled trainings from future
+                    if (t.status === 'cancelled' || t.ratings.every(t => t.score)) {
+                        return false;
+                    }
+
+               
+
+                    // Training is future if its end time hasn't passed yet
+                    const endTime = getTrainingEndDateTime(t);
+                    return endTime >= now;
+                });
 
                 items = trainingsTab === 'past' ? pastTrainings : futureTrainings;
                 title = trainingsTab === 'past' ? 'Прошедшие тренировки' : 'Запланированные тренировки';
@@ -1544,11 +1625,14 @@ const AdminDashboardPage: React.FC = () => {
 
     const { items: sortedItems, requestSort, sortConfig } = useSortableData(listData.filteredItems, initialSortConfig);
     
+    console.log(sortedItems);
+
     useEffect(() => {
         setVisibleCount(pageSize);
     }, [sortedItems, pageSize]);
 
     const displayedItems = sortedItems.slice(0, visibleCount);
+    
     const totalItems = sortedItems.length;
 
     const handleShowMore = () => {
@@ -1649,6 +1733,7 @@ const AdminDashboardPage: React.FC = () => {
                                         <SortableHeader columnKey="name" title="Пользователь" requestSort={requestSort} sortConfig={sortConfig} />
                                         {visibleUserColumns.includes('id') && <SortableHeader columnKey="id" title="ID" requestSort={requestSort} sortConfig={sortConfig} />}
                                         {visibleUserColumns.includes('city') && <SortableHeader columnKey="city" title="Город" requestSort={requestSort} sortConfig={sortConfig} />}
+                                        {visibleUserColumns.includes('region') && <SortableHeader columnKey="region" title="Регион" requestSort={requestSort} sortConfig={sortConfig} />}
                                         {visibleUserColumns.includes('role') && <SortableHeader columnKey="role" title="Роль" requestSort={requestSort} sortConfig={sortConfig} />}
                                         {visibleUserColumns.includes('subscription') && <SortableHeader columnKey="subscriptionTier" title="Подписка" requestSort={requestSort} sortConfig={sortConfig} />}
                                         {visibleUserColumns.includes('referralCount') && <SortableHeader columnKey="referralCount" title="Рефералы" requestSort={requestSort} sortConfig={sortConfig} className="text-center" />}
@@ -1692,12 +1777,15 @@ const AdminDashboardPage: React.FC = () => {
                                             </td>
                                         )}
                                         {visibleUserColumns.includes('city') && <td className="px-6 py-4 text-sm">{item.city}</td>}
-                                        {visibleUserColumns.includes('role') && <td className="px-6 py-4 text-sm">{item.role}</td>}
+                                        {visibleUserColumns.includes('region') && <td className="px-6 py-4 text-sm">{item.region}</td>}
+                                        {visibleUserColumns.includes('role') && <td className="px-6 py-4 text-sm">{getRoleDisplayName(item.role)}</td>}
                                         {visibleUserColumns.includes('subscription') && (
                                             <td className="px-6 py-4 text-sm whitespace-nowrap">
                                                 <button onClick={() => setEditingSubscriptionUser(item as User)} className="hover:underline text-left" disabled={!!item.isDeleted}>
                                                     <p className="font-semibold">{item.subscription?.tier || 'Нет'}</p>
-                                                    {item.subscription?.expiresAt ? (
+                                                    {item.subscription?.tier === SubscriptionTier.Base ? (
+                                                        <p className="text-xs text-gray-500">Бессрочно</p>
+                                                    ) : item.subscription?.expiresAt ? (
                                                         <p className="text-xs text-gray-500">до {new Date(item.subscription.expiresAt).toLocaleDateString('ru-RU')}</p>
                                                     ) : (
                                                         <p className="text-xs text-gray-500">Бессрочно</p>
@@ -1725,7 +1813,7 @@ const AdminDashboardPage: React.FC = () => {
                                         {!showDeletedUsers && visibleUserColumns.includes('effectiveDiscount') && 
                                             <td className="px-6 py-4 text-sm text-center">
                                                 <button onClick={() => setEditingDiscountUser(item as User)} className="hover:underline" title="Редактировать скидку">
-                                                    {(item as any).effectiveDiscount}%
+                                                    {((item as any).effectiveDiscount !== undefined && (item as any).effectiveDiscount !== null) ? `${(item as any).effectiveDiscount}%` : '0%'}
                                                 </button>
                                             </td>
                                         }
@@ -1954,7 +2042,7 @@ const AdminDashboardPage: React.FC = () => {
         <div className="space-y-6">
             <ConfirmationModal isOpen={!!deletingUser} onClose={() => setDeletingUser(null)} onConfirm={confirmDeleteUser} title="Подтвердить удаление" message={`Вы уверены, что хотите удалить пользователя ${deletingUser?.name} ${deletingUser?.surname}? Это действие нельзя отменить.`} />
             <ConfirmationModal isOpen={!!deletingTraining} onClose={() => setDeletingTraining(null)} onConfirm={confirmDeleteTraining} title="Подтвердить удаление" message={`Вы уверены, что хотите удалить тренировку ${deletingTraining?.id}? Это действие нельзя отменить.`} />
-            <EditUserModal user={editingUser} isOpen={!!editingUser} onClose={() => setEditingUser(null)} onSave={updateUserAndId} locations={locations} />
+            <EditUserModal user={editingUser} isOpen={!!editingUser} onClose={() => setEditingUser(null)} onSave={updateUserAndId} locations={(locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA} />
             <EditDiscountModal user={editingDiscountUser} isOpen={!!editingDiscountUser} onClose={() => setEditingDiscountUser(null)} onSave={handleSaveDiscount} />
             <UserInfoModal user={infoUser} isOpen={!!infoUser} onClose={() => setInfoUser(null)} onBonusesClick={canManageUsers ? setEditingBonusesForUser : undefined} />
             <AdminBonusModal user={editingBonusesForUser} isOpen={!!editingBonusesForUser} onClose={() => setEditingBonusesForUser(null)} onSave={adminUpdateBonuses} transactions={bonusTransactions} settings={settings} onSettingsSave={updateSettings} allUsers={users} />

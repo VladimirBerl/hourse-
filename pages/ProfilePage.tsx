@@ -1210,7 +1210,7 @@ const ChatPage: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    {newMessage.trim() === '' ? (
+                    {currentUser.subscription.tier === SubscriptionTier.Maximum &&newMessage.trim() === '' ? (
                       <button
                         type="button"
                         onMouseDown={startRecording}
