@@ -252,6 +252,7 @@ const NewsPage: React.FC = () => {
         
         const filteredForUser = news.filter(n => {
             if (n.publishTimestamp && new Date(n.publishTimestamp) > now) return false;
+            if (n.deletionTimestamp && new Date(n.deletionTimestamp) <= now) return false;
             
             // Subscription check
             if (n.targetSubscriptionTiers && n.targetSubscriptionTiers.length > 0) {

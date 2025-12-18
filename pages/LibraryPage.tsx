@@ -231,6 +231,7 @@ const LibraryPage: React.FC = () => {
         
         const filteredForUser = libraryPosts.filter(p => {
             if (p.publishTimestamp && new Date(p.publishTimestamp) > now) return false;
+            if (p.deletionTimestamp && new Date(p.deletionTimestamp) <= now) return false;
             
             // Subscription check
             if (p.targetSubscriptionTiers && p.targetSubscriptionTiers.length > 0) {

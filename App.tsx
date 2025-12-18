@@ -1512,6 +1512,20 @@ const App: React.FC = () => {
     const now = new Date();
 
     const isPostVisibleToUser = (post: Announcement | NewsItem | LibraryPost, user: User) => {
+      const now = new Date();
+      
+      // Deletion timestamp check - don't show posts that should be deleted
+      if (post.deletionTimestamp && new Date(post.deletionTimestamp) <= now) {
+        return false;
+      }
+
+      // Subscription check
+      if (post.targetSubscriptionTiers && post.targetSubscriptionTiers.length > 0) {
+        if (!user.subscription || !post.targetSubscriptionTiers.includes(user.subscription.tier)) {
+          return false;
+        }
+      }
+
       // Role check
       const roleMatch =
         !post.targetRoles || post.targetRoles.length === 0 || post.targetRoles.includes(user.role);

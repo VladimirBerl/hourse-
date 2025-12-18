@@ -59,9 +59,19 @@ export const addLibraryPost = async (req: any, res: any) => {
             }
 
             if (poll) {
-                const newPoll = await Poll.create({ ...poll, libraryPostId }, { transaction: t });
-                if (poll.options && poll.options.length > 0) {
-                    await PollOption.bulkCreate(poll.options.map((opt: any) => ({ ...opt, pollId: newPoll.getDataValue('id') })), { transaction: t });
+                // Extract only valid Poll fields (exclude id, options, votes which are handled separately)
+                const { id, options, votes, ...pollData } = poll;
+                // Convert pollEndsAt string to Date if present
+                if (pollData.pollEndsAt && typeof pollData.pollEndsAt === 'string') {
+                    pollData.pollEndsAt = new Date(pollData.pollEndsAt);
+                }
+                const newPoll = await Poll.create({ ...pollData, libraryPostId }, { transaction: t });
+                if (options && options.length > 0) {
+                    await PollOption.bulkCreate(options.map((opt: any) => {
+                        // Extract only valid PollOption fields (exclude id which is auto-generated)
+                        const { id: optId, ...optionData } = opt;
+                        return { ...optionData, pollId: newPoll.getDataValue('id') };
+                    }), { transaction: t });
                 }
             }
 
@@ -107,7 +117,7 @@ export const addLibraryPost = async (req: any, res: any) => {
 export const updateLibraryPost = async (req: any, res: any) => {
     const { id } = req.params;
     const { user: currentUser } = req;
-    const { images, ...updateData } = req.body;
+    const { images, poll, quiz, ...updateData } = req.body;
     
     try {
         const post = await LibraryPost.findByPk(id);
@@ -132,14 +142,115 @@ export const updateLibraryPost = async (req: any, res: any) => {
                     }), { transaction: tx });
                 }
             }
+
+            if (poll !== undefined) {
+                const existingPoll = await Poll.findOne({ where: { libraryPostId: id }, transaction: tx });
+                if (poll === null || poll === false) {
+                    // Delete poll if poll is null or false
+                    if (existingPoll) {
+                        await PollOption.destroy({ where: { pollId: existingPoll.getDataValue('id') }, transaction: tx });
+                        await existingPoll.destroy({ transaction: tx });
+                    }
+                } else if (existingPoll) {
+                    await PollOption.destroy({ where: { pollId: existingPoll.getDataValue('id') }, transaction: tx });
+                    // Extract only valid Poll fields
+                    const { id: pollId, options, votes, ...pollData } = poll;
+                    // Convert pollEndsAt string to Date if present
+                    if (pollData.pollEndsAt && typeof pollData.pollEndsAt === 'string') {
+                        pollData.pollEndsAt = new Date(pollData.pollEndsAt);
+                    }
+                    await existingPoll.update(pollData, { transaction: tx });
+                    if (options) {
+                        await PollOption.bulkCreate(options.map((opt: any) => {
+                            const { id: optId, ...optionData } = opt;
+                            return { ...optionData, pollId: existingPoll.getDataValue('id') };
+                        }), { transaction: tx });
+                    }
+                } else {
+                    // Extract only valid Poll fields
+                    const { id: pollId, options, votes, ...pollData } = poll;
+                    // Convert pollEndsAt string to Date if present
+                    if (pollData.pollEndsAt && typeof pollData.pollEndsAt === 'string') {
+                        pollData.pollEndsAt = new Date(pollData.pollEndsAt);
+                    }
+                    const newPoll = await Poll.create({ ...pollData, libraryPostId: id }, { transaction: tx });
+                    if (options) {
+                        await PollOption.bulkCreate(options.map((opt: any) => {
+                            const { id: optId, ...optionData } = opt;
+                            return { ...optionData, pollId: newPoll.getDataValue('id') };
+                        }), { transaction: tx });
+                    }
+                }
+            }
+
+            if (quiz !== undefined) {
+                const existingQuiz = await Quiz.findOne({ where: { libraryPostId: id }, transaction: tx });
+                if (quiz === null || quiz === false) {
+                    // Delete quiz if quiz is null or false
+                    if (existingQuiz) {
+                        await QuizOption.destroy({ where: { quizId: existingQuiz.getDataValue('id') }, transaction: tx });
+                        await existingQuiz.destroy({ transaction: tx });
+                    }
+                } else if (existingQuiz) {
+                    await QuizOption.destroy({ where: { quizId: existingQuiz.getDataValue('id') }, transaction: tx });
+                    // Extract only valid Quiz fields
+                    const { id: quizIdParam, options, submissions, correctOptionIds, ...quizData } = quiz;
+                    const existingQuizId = existingQuiz.getDataValue('id');
+                    
+                    // Create options and build mapping from temporary IDs to real IDs
+                    const tempIdToRealIdMap: Record<string, string> = {};
+                    
+                    if (options && options.length > 0) {
+                        for (const opt of options) {
+                            const { id: tempId, ...optionData } = opt;
+                            const createdOption = await QuizOption.create({ ...optionData, quizId: existingQuizId }, { transaction: tx });
+                            const realId = createdOption.getDataValue('id');
+                            tempIdToRealIdMap[tempId] = realId;
+                        }
+                    }
+                    
+                    // Map correctOptionIds from temporary IDs to real IDs
+                    const realCorrectOptionIds = correctOptionIds
+                        ? correctOptionIds.map((tempId: string) => tempIdToRealIdMap[tempId]).filter(Boolean)
+                        : [];
+                    
+                    // Update quiz with correct option IDs
+                    await existingQuiz.update({ ...quizData, correctOptionIds: realCorrectOptionIds }, { transaction: tx });
+                } else {
+                    // Extract only valid Quiz fields
+                    const { id: quizIdParam, options, submissions, correctOptionIds, ...quizData } = quiz;
+                    const newQuiz = await Quiz.create({ ...quizData, libraryPostId: id, correctOptionIds: [] }, { transaction: tx });
+                    const newQuizId = newQuiz.getDataValue('id');
+                    
+                    // Create options and build mapping from temporary IDs to real IDs
+                    const tempIdToRealIdMap: Record<string, string> = {};
+                    
+                    if (options && options.length > 0) {
+                        for (const opt of options) {
+                            const { id: tempId, ...optionData } = opt;
+                            const createdOption = await QuizOption.create({ ...optionData, quizId: newQuizId }, { transaction: tx });
+                            const realId = createdOption.getDataValue('id');
+                            tempIdToRealIdMap[tempId] = realId;
+                        }
+                    }
+                    
+                    // Map correctOptionIds from temporary IDs to real IDs
+                    const realCorrectOptionIds = correctOptionIds
+                        ? correctOptionIds.map((tempId: string) => tempIdToRealIdMap[tempId]).filter(Boolean)
+                        : [];
+                    
+                    // Update quiz with correct option IDs
+                    await newQuiz.update({ correctOptionIds: realCorrectOptionIds }, { transaction: tx });
+                }
+            }
         });
 
         const allPosts = await LibraryPost.findAll({ include: includeOptions });
         res.status(200).json(allPosts);
 
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Error updating library post.' });
+        console.error('Error updating library post:', e);
+        res.status(500).json({ message: 'Error updating library post.', error: e instanceof Error ? e.message : String(e) });
     }
 };
 

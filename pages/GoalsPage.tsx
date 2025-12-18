@@ -615,6 +615,7 @@ const AnnouncementsPage: React.FC = () => {
         const filteredForUser = announcements.filter(a => {
             if (a.status !== 'published') return false;
             if (a.publishTimestamp && new Date(a.publishTimestamp) > now) return false;
+            if (a.deletionTimestamp && new Date(a.deletionTimestamp) <= now) return false;
 
             // Subscription check
             if (a.targetSubscriptionTiers && a.targetSubscriptionTiers.length > 0) {

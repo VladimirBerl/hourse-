@@ -513,21 +513,45 @@ const PublicationEditorModal: React.FC<PublicationEditorModalProps> = ({ isOpen,
     };
 
     const renderSelectedLocations = () => {
+        const locs = (locations && Object.keys(locations).length > 0) ? locations : LOCATION_DATA;
+        
+        // Фильтруем регионы: не показываем регионы, если их родительская страна выбрана
         const displayableRegions = targetRegions.filter(region => {
-            const parentCountry = Object.keys(locations).find(c => locations[c] && Object.keys(locations[c]).includes(region));
-            return !parentCountry || !targetCountries.includes(parentCountry);
-        });
-    
-        const displayableCities = targetCities.filter(city => {
-            let parentRegionName: string | undefined;
-            for (const country in locations) {
-                const region = Object.keys(locations[country]).find(r => locations[country][r].includes(city));
-                if (region) {
-                    parentRegionName = region;
-                    break;
+            // Находим родительскую страну для региона
+            for (const country in locs) {
+                if (locs[country] && Object.keys(locs[country] || {}).includes(region)) {
+                    // Если родительская страна выбрана, не показываем регион
+                    return !targetCountries.includes(country);
                 }
             }
-            return !parentRegionName || !targetRegions.includes(parentRegionName);
+            return true;
+        });
+    
+        // Фильтруем города: не показываем города, если их родительский регион или страна выбраны
+        const displayableCities = targetCities.filter(city => {
+            let parentCountryName: string | undefined;
+            let parentRegionName: string | undefined;
+            
+            // Находим родительскую страну и регион для города
+            for (const country in locs) {
+                for (const region in locs[country] || {}) {
+                    if (locs[country][region]?.includes(city)) {
+                        parentCountryName = country;
+                        parentRegionName = region;
+                        break;
+                    }
+                }
+                if (parentCountryName && parentRegionName) break;
+            }
+            
+            // Не показываем город, если выбрана его родительская страна или регион
+            if (parentCountryName && targetCountries.includes(parentCountryName)) {
+                return false;
+            }
+            if (parentRegionName && targetRegions.includes(parentRegionName)) {
+                return false;
+            }
+            return true;
         });
     
         if (targetCountries.length === 0 && displayableRegions.length === 0 && displayableCities.length === 0) {

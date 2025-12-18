@@ -8,6 +8,8 @@ import { Server } from 'socket.io';
 import path from 'path';
 import sequelize from './db'; // Import sequelize instance
 import { seedDatabase } from './seed'; // Import seed function
+import { Announcement, NewsItem, LibraryPost, PostImage, Poll, PollOption, Quiz, QuizOption } from './db';
+import { Op } from 'sequelize';
 
 import authRouter from './router/auth.router';
 import userRouter from './router/user.router';
@@ -77,6 +79,121 @@ sequelize.authenticate().then(async () => {
     
     // Seed database with initial admins
     await seedDatabase();
+
+    // Auto-delete posts with expired deletionTimestamp
+    const autoDeletePosts = async () => {
+        try {
+            const now = new Date();
+            
+            // Delete announcements
+            const expiredAnnouncements = await Announcement.findAll({
+                where: {
+                    deletionTimestamp: {
+                        [Op.lte]: now
+                    }
+                }
+            });
+            
+            for (const announcement of expiredAnnouncements) {
+                const announcementId = announcement.getDataValue('id');
+                
+                // Delete related data
+                await PostImage.destroy({ where: { announcementId } });
+                const poll = await Poll.findOne({ where: { announcementId } });
+                if (poll) {
+                    const pollId = poll.getDataValue('id');
+                    await PollOption.destroy({ where: { pollId } });
+                    await poll.destroy();
+                }
+                const quiz = await Quiz.findOne({ where: { announcementId } });
+                if (quiz) {
+                    const quizId = quiz.getDataValue('id');
+                    await QuizOption.destroy({ where: { quizId } });
+                    await quiz.destroy();
+                }
+                
+                await announcement.destroy();
+            }
+            
+            if (expiredAnnouncements.length > 0) {
+                console.log(`Auto-deleted ${expiredAnnouncements.length} expired announcement(s).`);
+            }
+            
+            // Delete news items
+            const expiredNews = await NewsItem.findAll({
+                where: {
+                    deletionTimestamp: {
+                        [Op.lte]: now
+                    }
+                }
+            });
+            
+            for (const newsItem of expiredNews) {
+                const newsItemId = newsItem.getDataValue('id');
+                
+                // Delete related data
+                await PostImage.destroy({ where: { newsItemId } });
+                const poll = await Poll.findOne({ where: { newsItemId } });
+                if (poll) {
+                    const pollId = poll.getDataValue('id');
+                    await PollOption.destroy({ where: { pollId } });
+                    await poll.destroy();
+                }
+                const quiz = await Quiz.findOne({ where: { newsItemId } });
+                if (quiz) {
+                    const quizId = quiz.getDataValue('id');
+                    await QuizOption.destroy({ where: { quizId } });
+                    await quiz.destroy();
+                }
+                
+                await newsItem.destroy();
+            }
+            
+            if (expiredNews.length > 0) {
+                console.log(`Auto-deleted ${expiredNews.length} expired news item(s).`);
+            }
+            
+            // Delete library posts
+            const expiredLibraryPosts = await LibraryPost.findAll({
+                where: {
+                    deletionTimestamp: {
+                        [Op.lte]: now
+                    }
+                }
+            });
+            
+            for (const libraryPost of expiredLibraryPosts) {
+                const libraryPostId = libraryPost.getDataValue('id');
+                
+                // Delete related data
+                await PostImage.destroy({ where: { libraryPostId } });
+                const poll = await Poll.findOne({ where: { libraryPostId } });
+                if (poll) {
+                    const pollId = poll.getDataValue('id');
+                    await PollOption.destroy({ where: { pollId } });
+                    await poll.destroy();
+                }
+                const quiz = await Quiz.findOne({ where: { libraryPostId } });
+                if (quiz) {
+                    const quizId = quiz.getDataValue('id');
+                    await QuizOption.destroy({ where: { quizId } });
+                    await quiz.destroy();
+                }
+                
+                await libraryPost.destroy();
+            }
+            
+            if (expiredLibraryPosts.length > 0) {
+                console.log(`Auto-deleted ${expiredLibraryPosts.length} expired library post(s).`);
+            }
+        } catch (error) {
+            console.error('Error during auto-deletion of posts:', error);
+        }
+    };
+    
+    // Run auto-deletion immediately on startup, then every hour
+    await autoDeletePosts();
+    setInterval(autoDeletePosts, 60 * 60 * 1000); // Check every hour
 
     httpServer.listen(port, () => {
         console.log(`Server listening on http://localhost:${port}`);

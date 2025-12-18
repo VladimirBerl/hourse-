@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useContext, useEffect } from 'react';
+import React, { useState, useMemo, useContext, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { AuthContext, DataContext } from '../App';
 import { UserRole, Announcement, NewsItem, LibraryPost, Quiz, User } from '../types';
@@ -34,14 +34,19 @@ const QuizComponent: React.FC<QuizComponentProps<any>> = ({ item, itemType }) =>
             setSelectedOptions([optionId]);
         }
     };
-    
-    // Trigger confetti only once after submission for non-admins
-    useEffect(() => {
-        if (userSubmission && !isAdmin) {
-            const sortedUserAnswer = [...userSubmission.optionIds].sort();
+
+    const handleQuizSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (selectedOptions.length > 0 && !isAdmin) {
+            // Check if answer is correct before submitting
+            const sortedUserAnswer = [...selectedOptions].sort();
             const sortedCorrectAnswer = [...quiz.correctOptionIds].sort();
             const isCorrect = JSON.stringify(sortedUserAnswer) === JSON.stringify(sortedCorrectAnswer);
 
+            // Submit the answer
+            await submitQuizAnswer(item.id, itemType, selectedOptions);
+
+            // Show confetti only if answer is correct and user is not admin
             if (isCorrect) {
                 confetti({
                     particleCount: 150,
@@ -50,13 +55,9 @@ const QuizComponent: React.FC<QuizComponentProps<any>> = ({ item, itemType }) =>
                     zIndex: 9999
                 });
             }
-        }
-    }, [userSubmission, isAdmin, quiz.correctOptionIds]); 
-
-    const handleQuizSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (selectedOptions.length > 0) {
-            submitQuizAnswer(item.id, itemType, selectedOptions);
+        } else if (selectedOptions.length > 0) {
+            // Admin can submit without confetti
+            await submitQuizAnswer(item.id, itemType, selectedOptions);
         }
     };
 

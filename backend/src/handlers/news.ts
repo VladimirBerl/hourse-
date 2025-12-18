@@ -59,9 +59,19 @@ export const addNewsItem = async (req: any, res: any) => {
             }
 
             if (poll) {
-                const newPoll = await Poll.create({ ...poll, newsItemId }, { transaction: t });
-                if (poll.options && poll.options.length > 0) {
-                    await PollOption.bulkCreate(poll.options.map((opt: any) => ({ ...opt, pollId: newPoll.getDataValue('id') })), { transaction: t });
+                // Extract only valid Poll fields (exclude id, options, votes which are handled separately)
+                const { id, options, votes, ...pollData } = poll;
+                // Convert pollEndsAt string to Date if present
+                if (pollData.pollEndsAt && typeof pollData.pollEndsAt === 'string') {
+                    pollData.pollEndsAt = new Date(pollData.pollEndsAt);
+                }
+                const newPoll = await Poll.create({ ...pollData, newsItemId }, { transaction: t });
+                if (options && options.length > 0) {
+                    await PollOption.bulkCreate(options.map((opt: any) => {
+                        // Extract only valid PollOption fields (exclude id which is auto-generated)
+                        const { id: optId, ...optionData } = opt;
+                        return { ...optionData, pollId: newPoll.getDataValue('id') };
+                    }), { transaction: t });
                 }
             }
 
